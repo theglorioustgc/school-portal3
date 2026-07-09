@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
+const classesRoutes = require('./routes/classes');
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // --- Mount modules here as they're built ---
 app.use('/auth', authRoutes);
+app.use('/', classesRoutes);
 // app.use('/timetable', timetableRoutes);   <- next module
 // app.use('/attendance', attendanceRoutes);
 // app.use('/gradebook', gradebookRoutes);
