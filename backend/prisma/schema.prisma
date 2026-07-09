@@ -84,7 +84,8 @@ model Teacher {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  assignments     TeacherAssignment[]
+  assignments       TeacherAssignment[]
+  timetableEntries  TimetableEntry[]
 }
 
 model AdminUser {
@@ -115,12 +116,14 @@ model SchoolClass {
   name        String   @unique // e.g. "JSS1", "JSS2A"
   students    Student[]
   assignments TeacherAssignment[]
+  timetableEntries TimetableEntry[]
 }
 
 model Subject {
   id          String   @id @default(uuid())
   name        String   @unique // e.g. "Mathematics"
   assignments TeacherAssignment[]
+  timetableEntries TimetableEntry[]
 }
 
 // ----------------------------------------------------------
@@ -138,4 +141,25 @@ model TeacherAssignment {
   subject     Subject  @relation(fields: [subjectId], references: [id])
 
   @@unique([teacherId, classId, subjectId])
+}
+
+// ----------------------------------------------------------
+// TIMETABLE — one row per scheduled slot.
+// Conflict checking (teacher/class double-booking) happens
+// in the route logic, not here — this table just stores
+// the final, validated result.
+// ----------------------------------------------------------
+model TimetableEntry {
+  id          String   @id @default(uuid())
+  classId     String
+  class       SchoolClass @relation(fields: [classId], references: [id])
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id])
+  dayOfWeek   String   // "Monday", "Tuesday", etc.
+  periodNumber Int     // 1, 2, 3... simpler than tracking exact times for v1
+  createdAt   DateTime @default(now())
+
+  @@unique([classId, dayOfWeek, periodNumber])
 }
