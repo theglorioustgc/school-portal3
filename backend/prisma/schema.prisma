@@ -1,7 +1,7 @@
 // ==========================================================
 // FOUNDATION SCHEMA
-// Every other module (attendance, grades, fees...)
-// will add its own tables that reference these by ID.
+// Every other module (fees, documents...) will add its own
+// tables that reference these by ID.
 // ==========================================================
 
 generator client {
@@ -9,13 +9,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // Supabase Postgres connection string goes in .env
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// ----------------------------------------------------------
-// SCHOOL CONFIG — one row per school instance.
-// ----------------------------------------------------------
 model SchoolConfig {
   id            String   @id @default(uuid())
   schoolCode    String   @unique
@@ -30,9 +27,6 @@ model SchoolConfig {
   updatedAt     DateTime @updatedAt
 }
 
-// ----------------------------------------------------------
-// ID COUNTERS
-// ----------------------------------------------------------
 model IdCounter {
   id          String @id @default(uuid())
   idType      String
@@ -42,9 +36,6 @@ model IdCounter {
   @@unique([idType, year])
 }
 
-// ----------------------------------------------------------
-// ROLES
-// ----------------------------------------------------------
 model Student {
   id              String   @id @default(uuid())
   studentId       String   @unique
@@ -64,6 +55,7 @@ model Student {
   updatedAt       DateTime @updatedAt
 
   attendanceRecords AttendanceRecord[]
+  gradeRecords      GradeRecord[]
 }
 
 model Teacher {
@@ -82,6 +74,7 @@ model Teacher {
   assignments       TeacherAssignment[]
   timetableEntries  TimetableEntry[]
   attendanceMarked  AttendanceRecord[]
+  gradesEntered     GradeRecord[]
 }
 
 model AdminUser {
@@ -103,9 +96,6 @@ model BursarUser {
   createdAt       DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// CLASSES & SUBJECTS
-// ----------------------------------------------------------
 model SchoolClass {
   id          String   @id @default(uuid())
   name        String   @unique
@@ -113,6 +103,7 @@ model SchoolClass {
   assignments TeacherAssignment[]
   timetableEntries TimetableEntry[]
   attendanceRecords AttendanceRecord[]
+  gradeRecords GradeRecord[]
 }
 
 model Subject {
@@ -120,11 +111,9 @@ model Subject {
   name        String   @unique
   assignments TeacherAssignment[]
   timetableEntries TimetableEntry[]
+  gradeRecords GradeRecord[]
 }
 
-// ----------------------------------------------------------
-// TEACHER ASSIGNMENT — the gatekeeper table.
-// ----------------------------------------------------------
 model TeacherAssignment {
   id          String   @id @default(uuid())
   teacherId   String
@@ -137,9 +126,6 @@ model TeacherAssignment {
   @@unique([teacherId, classId, subjectId])
 }
 
-// ----------------------------------------------------------
-// TIMETABLE
-// ----------------------------------------------------------
 model TimetableEntry {
   id          String   @id @default(uuid())
   classId     String
@@ -155,11 +141,6 @@ model TimetableEntry {
   @@unique([classId, dayOfWeek, periodNumber])
 }
 
-// ----------------------------------------------------------
-// ATTENDANCE — one row per student, per class, per day.
-// Marked by whichever teacher is assigned to that class
-// (any subject), or by an admin. Enforced in route logic.
-// ----------------------------------------------------------
 model AttendanceRecord {
   id            String   @id @default(uuid())
   studentId     String
@@ -167,11 +148,40 @@ model AttendanceRecord {
   classId       String
   class         SchoolClass @relation(fields: [classId], references: [id])
   date          DateTime @db.Date
-  status        String   // "present" | "absent" | "late"
+  status        String
   markedById    String?
   markedBy      Teacher? @relation(fields: [markedById], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@unique([studentId, date])
+}
+
+// ----------------------------------------------------------
+// GRADEBOOK — one row per student, per subject, per term.
+// draft -> submitted, same pattern as attendance's permission
+// check: only the teacher assigned to this class+subject
+// (or an admin) can write to it.
+// ----------------------------------------------------------
+model GradeRecord {
+  id            String   @id @default(uuid())
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id])
+  classId       String
+  class         SchoolClass @relation(fields: [classId], references: [id])
+  subjectId     String
+  subject       Subject  @relation(fields: [subjectId], references: [id])
+  term          String   // e.g. "Term 2, 2026"
+  ca1           Float?
+  ca2           Float?
+  ca3           Float?
+  exam          Float?
+  total         Float?   // computed: ca1+ca2+ca3+exam
+  status        String   @default("draft") // "draft" | "submitted"
+  enteredById   String?
+  enteredBy     Teacher? @relation(fields: [enteredById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([studentId, subjectId, term])
 }
