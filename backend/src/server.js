@@ -1,8 +1,8 @@
 // server.js
 //
-// This is the single entry point. Every future module (timetable.js,
-// attendance.js, gradebook.js, fees.js...) gets mounted here the same
-// way authRoutes is mounted below.
+// This is the single entry point. Every future module (attendance.js,
+// gradebook.js, fees.js...) gets mounted here the same way the routes
+// below are mounted.
 
 require('dotenv').config();
 const express = require('express');
@@ -10,6 +10,7 @@ const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
 const classesRoutes = require('./routes/classes');
+const timetableRoutes = require('./routes/timetable');
 
 const app = express();
 
@@ -22,8 +23,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 // --- Mount modules here as they're built ---
 app.use('/auth', authRoutes);
 app.use('/', classesRoutes);
-// app.use('/timetable', timetableRoutes);   <- next module
-// app.use('/attendance', attendanceRoutes);
+app.use('/', timetableRoutes);
+// app.use('/attendance', attendanceRoutes);   <- next module
 // app.use('/gradebook', gradebookRoutes);
 // app.use('/fees', feesRoutes);
 
