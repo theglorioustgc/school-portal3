@@ -1,6 +1,6 @@
 // ==========================================================
 // FOUNDATION SCHEMA
-// Every other module (timetable, attendance, grades, fees...)
+// Every other module (attendance, grades, fees...)
 // will add its own tables that reference these by ID.
 // ==========================================================
 
@@ -15,32 +15,27 @@ datasource db {
 
 // ----------------------------------------------------------
 // SCHOOL CONFIG — one row per school instance.
-// This is what makes the template "per-school" without
-// touching code: name, logo, colors, contact info, term dates.
 // ----------------------------------------------------------
 model SchoolConfig {
   id            String   @id @default(uuid())
-  schoolCode    String   @unique // e.g. "GHS" — used in every generated ID
+  schoolCode    String   @unique
   schoolName    String
   logoUrl       String?
   primaryColor  String   @default("#1E3A8A")
   secondaryColor String  @default("#F59E0B")
   contactEmail  String?
   contactPhone  String?
-  currentTerm   String?  // e.g. "Term 2, 2026"
+  currentTerm   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
 // ----------------------------------------------------------
-// ID COUNTERS — guarantees safe, gap-free sequential numbers
-// per school, per ID type (student/staff), per year.
-// A transaction increments this atomically to avoid two
-// registrations colliding on the same number.
+// ID COUNTERS
 // ----------------------------------------------------------
 model IdCounter {
   id          String @id @default(uuid())
-  idType      String // "STUDENT" or "STAFF"
+  idType      String
   year        Int
   lastNumber  Int    @default(0)
 
@@ -49,18 +44,16 @@ model IdCounter {
 
 // ----------------------------------------------------------
 // ROLES
-// Student & Teacher log in with generated IDs.
-// Admin & Bursar log in with email.
 // ----------------------------------------------------------
 model Student {
   id              String   @id @default(uuid())
-  studentId       String   @unique // e.g. GHS-2024-0089 — the login credential
+  studentId       String   @unique
   firstName       String
   lastName        String
   admissionYear   Int
   classId         String?
   class           SchoolClass? @relation(fields: [classId], references: [id])
-  status          String   @default("active") // active | alumni | withdrawn
+  status          String   @default("active")
   leftDate        DateTime?
   leftReason      String?
   parentEmail     String?
@@ -69,11 +62,13 @@ model Student {
   mustChangePassword Boolean @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  attendanceRecords AttendanceRecord[]
 }
 
 model Teacher {
   id              String   @id @default(uuid())
-  teacherId       String   @unique // e.g. GHS-STF-2024-0012 — the login credential
+  teacherId       String   @unique
   firstName       String
   lastName        String
   joinYear        Int
@@ -86,21 +81,22 @@ model Teacher {
 
   assignments       TeacherAssignment[]
   timetableEntries  TimetableEntry[]
+  attendanceMarked  AttendanceRecord[]
 }
 
 model AdminUser {
   id              String   @id @default(uuid())
-  email           String   @unique // the login credential
+  email           String   @unique
   firstName       String
   lastName        String
-  role            String   @default("admin") // "admin" (principal) — kept distinct from bursar
+  role            String   @default("admin")
   passwordHash    String
   createdAt       DateTime @default(now())
 }
 
 model BursarUser {
   id              String   @id @default(uuid())
-  email           String   @unique // the login credential
+  email           String   @unique
   firstName       String
   lastName        String
   passwordHash    String
@@ -108,28 +104,26 @@ model BursarUser {
 }
 
 // ----------------------------------------------------------
-// CLASSES & SUBJECTS — the shared reference data that
-// timetable, attendance, gradebook, assignments all key off.
+// CLASSES & SUBJECTS
 // ----------------------------------------------------------
 model SchoolClass {
   id          String   @id @default(uuid())
-  name        String   @unique // e.g. "JSS1", "JSS2A"
+  name        String   @unique
   students    Student[]
   assignments TeacherAssignment[]
   timetableEntries TimetableEntry[]
+  attendanceRecords AttendanceRecord[]
 }
 
 model Subject {
   id          String   @id @default(uuid())
-  name        String   @unique // e.g. "Mathematics"
+  name        String   @unique
   assignments TeacherAssignment[]
   timetableEntries TimetableEntry[]
 }
 
 // ----------------------------------------------------------
 // TEACHER ASSIGNMENT — the gatekeeper table.
-// Every dropdown in the app ("which classes can this teacher
-// post to / grade / mark attendance for") reads from here.
 // ----------------------------------------------------------
 model TeacherAssignment {
   id          String   @id @default(uuid())
@@ -144,10 +138,7 @@ model TeacherAssignment {
 }
 
 // ----------------------------------------------------------
-// TIMETABLE — one row per scheduled slot.
-// Conflict checking (teacher/class double-booking) happens
-// in the route logic, not here — this table just stores
-// the final, validated result.
+// TIMETABLE
 // ----------------------------------------------------------
 model TimetableEntry {
   id          String   @id @default(uuid())
@@ -157,9 +148,30 @@ model TimetableEntry {
   subject     Subject  @relation(fields: [subjectId], references: [id])
   teacherId   String
   teacher     Teacher  @relation(fields: [teacherId], references: [id])
-  dayOfWeek   String   // "Monday", "Tuesday", etc.
-  periodNumber Int     // 1, 2, 3... simpler than tracking exact times for v1
+  dayOfWeek   String
+  periodNumber Int
   createdAt   DateTime @default(now())
 
   @@unique([classId, dayOfWeek, periodNumber])
+}
+
+// ----------------------------------------------------------
+// ATTENDANCE — one row per student, per class, per day.
+// Marked by whichever teacher is assigned to that class
+// (any subject), or by an admin. Enforced in route logic.
+// ----------------------------------------------------------
+model AttendanceRecord {
+  id            String   @id @default(uuid())
+  studentId     String
+  student       Student  @relation(fields: [studentId], references: [id])
+  classId       String
+  class         SchoolClass @relation(fields: [classId], references: [id])
+  date          DateTime @db.Date
+  status        String   // "present" | "absent" | "late"
+  markedById    String?
+  markedBy      Teacher? @relation(fields: [markedById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([studentId, date])
 }
