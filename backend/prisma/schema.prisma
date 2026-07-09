@@ -1,0 +1,141 @@
+// ==========================================================
+// FOUNDATION SCHEMA
+// Every other module (timetable, attendance, grades, fees...)
+// will add its own tables that reference these by ID.
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // Supabase Postgres connection string goes in .env
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------
+// SCHOOL CONFIG — one row per school instance.
+// This is what makes the template "per-school" without
+// touching code: name, logo, colors, contact info, term dates.
+// ----------------------------------------------------------
+model SchoolConfig {
+  id            String   @id @default(uuid())
+  schoolCode    String   @unique // e.g. "GHS" — used in every generated ID
+  schoolName    String
+  logoUrl       String?
+  primaryColor  String   @default("#1E3A8A")
+  secondaryColor String  @default("#F59E0B")
+  contactEmail  String?
+  contactPhone  String?
+  currentTerm   String?  // e.g. "Term 2, 2026"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ----------------------------------------------------------
+// ID COUNTERS — guarantees safe, gap-free sequential numbers
+// per school, per ID type (student/staff), per year.
+// A transaction increments this atomically to avoid two
+// registrations colliding on the same number.
+// ----------------------------------------------------------
+model IdCounter {
+  id          String @id @default(uuid())
+  idType      String // "STUDENT" or "STAFF"
+  year        Int
+  lastNumber  Int    @default(0)
+
+  @@unique([idType, year])
+}
+
+// ----------------------------------------------------------
+// ROLES
+// Student & Teacher log in with generated IDs.
+// Admin & Bursar log in with email.
+// ----------------------------------------------------------
+model Student {
+  id              String   @id @default(uuid())
+  studentId       String   @unique // e.g. GHS-2024-0089 — the login credential
+  firstName       String
+  lastName        String
+  admissionYear   Int
+  classId         String?
+  class           SchoolClass? @relation(fields: [classId], references: [id])
+  status          String   @default("active") // active | alumni | withdrawn
+  leftDate        DateTime?
+  leftReason      String?
+  parentEmail     String?
+  parentPhone     String?
+  passwordHash    String
+  mustChangePassword Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Teacher {
+  id              String   @id @default(uuid())
+  teacherId       String   @unique // e.g. GHS-STF-2024-0012 — the login credential
+  firstName       String
+  lastName        String
+  joinYear        Int
+  email           String?
+  phone           String?
+  passwordHash    String
+  mustChangePassword Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assignments     TeacherAssignment[]
+}
+
+model AdminUser {
+  id              String   @id @default(uuid())
+  email           String   @unique // the login credential
+  firstName       String
+  lastName        String
+  role            String   @default("admin") // "admin" (principal) — kept distinct from bursar
+  passwordHash    String
+  createdAt       DateTime @default(now())
+}
+
+model BursarUser {
+  id              String   @id @default(uuid())
+  email           String   @unique // the login credential
+  firstName       String
+  lastName        String
+  passwordHash    String
+  createdAt       DateTime @default(now())
+}
+
+// ----------------------------------------------------------
+// CLASSES & SUBJECTS — the shared reference data that
+// timetable, attendance, gradebook, assignments all key off.
+// ----------------------------------------------------------
+model SchoolClass {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. "JSS1", "JSS2A"
+  students    Student[]
+  assignments TeacherAssignment[]
+}
+
+model Subject {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g. "Mathematics"
+  assignments TeacherAssignment[]
+}
+
+// ----------------------------------------------------------
+// TEACHER ASSIGNMENT — the gatekeeper table.
+// Every dropdown in the app ("which classes can this teacher
+// post to / grade / mark attendance for") reads from here.
+// ----------------------------------------------------------
+model TeacherAssignment {
+  id          String   @id @default(uuid())
+  teacherId   String
+  teacher     Teacher  @relation(fields: [teacherId], references: [id])
+  classId     String
+  class       SchoolClass @relation(fields: [classId], references: [id])
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id])
+
+  @@unique([teacherId, classId, subjectId])
+}
