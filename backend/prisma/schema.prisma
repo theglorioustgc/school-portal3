@@ -23,6 +23,12 @@ model SchoolConfig {
   currentTerm   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // Early-warning thresholds — configurable per school, not hardcoded
+  attendanceAbsenceThreshold   Int   @default(3)    // absences in the rolling window
+  attendanceRateThreshold      Float @default(0.85) // below this rate also triggers
+  performanceDeclineThreshold  Float @default(10)   // point drop vs previous term
+  performanceLowThreshold      Float @default(40)   // absolute average below this
 }
 
 model IdCounter {
@@ -58,6 +64,7 @@ model Student {
   feePayments       StudentFeePayment[]
   examScripts       ExamScript[]
   resultPublications ResultPublication[]
+  flags             Flag[]
 }
 
 model Teacher {
@@ -351,24 +358,16 @@ model ResultPublication {
   @@unique([studentId, term])
 }
 
-// ----------------------------------------------------------
-// DOCUMENTS — link-based for v1 (consistent with assignments),
-// browsable/labeled, structurally separate from academic data.
-// ----------------------------------------------------------
 model Document {
   id            String   @id @default(uuid())
   label         String
-  category      String   // e.g. "birth_certificate", "letter", "record"
+  category      String
   fileUrl       String
   uploadedById  String?
   uploadedBy    AdminUser? @relation(fields: [uploadedById], references: [id])
   createdAt     DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// CONTENT / CMS — news/facts shown on the student dashboard.
-// Built into the admin dashboard itself, not a separate tool.
-// ----------------------------------------------------------
 model ContentPost {
   id            String   @id @default(uuid())
   title         String
@@ -380,4 +379,18 @@ model ContentPost {
   postedBy      AdminUser? @relation(fields: [postedById], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ----------------------------------------------------------
+// FLAGS — early-warning system. Written by a triggered check
+// (not recalculated live on every page load). Two types:
+// "attendance" and "performance" — details in the message field.
+// ----------------------------------------------------------
+model Flag {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id])
+  flagType    String   // "attendance" | "performance_declining" | "performance_low"
+  message     String
+  createdAt   DateTime @default(now())
 }
