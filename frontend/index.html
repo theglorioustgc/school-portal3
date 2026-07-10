@@ -213,7 +213,13 @@
         localStorage.setItem('token', data.token);
         localStorage.setItem('role', data.role);
 
-        window.location.href = 'dashboard.html';
+        const roleRoutes = {
+     admin: 'admin-dashboard.html',
+     teacher: 'dashboard.html',   // teacher dashboard not built yet
+     student: 'dashboard.html',   // student dashboard not built yet
+     bursar: 'dashboard.html',    // bursar dashboard not built yet
+   };
+   window.location.href = roleRoutes[data.role] || 'dashboard.html';
       } catch (err) {
         errorBox.textContent = 'Could not reach the server. Please check your connection.';
         errorBox.classList.add('visible');
