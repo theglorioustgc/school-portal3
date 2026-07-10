@@ -1,7 +1,7 @@
 // server.js
 //
-// This is the single entry point. Every future module (early-warning
-// flags...) gets mounted here the same way the routes below are mounted.
+// This is the single entry point. Every route module gets mounted
+// here the same way. This is now the complete backend.
 
 require('dotenv').config();
 const express = require('express');
@@ -18,6 +18,7 @@ const eventsRoutes = require('./routes/events');
 const feesRoutes = require('./routes/fees');
 const examsRoutes = require('./routes/exams');
 const adminRoutes = require('./routes/admin');
+const flagsRoutes = require('./routes/flags');
 
 const app = express();
 
@@ -27,7 +28,7 @@ app.use(express.json());
 // Health check — useful once this is deployed, to confirm the backend is alive
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// --- Mount modules here as they're built ---
+// --- All modules ---
 app.use('/auth', authRoutes);
 app.use('/', classesRoutes);
 app.use('/', timetableRoutes);
@@ -39,7 +40,7 @@ app.use('/', eventsRoutes);
 app.use('/', feesRoutes);
 app.use('/', examsRoutes);
 app.use('/', adminRoutes);
-// app.use('/flags', flagsRoutes);   <- next module
+app.use('/', flagsRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
