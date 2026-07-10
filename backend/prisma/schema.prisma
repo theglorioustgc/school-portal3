@@ -95,6 +95,8 @@ model AdminUser {
   announcements   Announcement[]
   eventsCreated   Event[]
   feePaymentsMarked StudentFeePayment[]
+  documentsUploaded Document[]
+  contentPosted   ContentPost[]
 }
 
 model BursarUser {
@@ -294,12 +296,6 @@ model StudentFeePayment {
   @@unique([studentId, feeTypeId])
 }
 
-// ----------------------------------------------------------
-// EXAMS
-// ----------------------------------------------------------
-
-// One answer key per class+subject+term. "answers" is a JSON
-// string like ["A","C","B","D",...] — index 0 = question 1.
 model ExamAnswerKey {
   id             String   @id @default(uuid())
   classId        String
@@ -307,7 +303,7 @@ model ExamAnswerKey {
   subjectId      String
   subject        Subject  @relation(fields: [subjectId], references: [id])
   term           String
-  answers        String   // JSON array of correct options
+  answers        String
   totalQuestions Int
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -315,9 +311,6 @@ model ExamAnswerKey {
   @@unique([classId, subjectId, term])
 }
 
-// One script per student, per subject, per term.
-// objectiveAnswers is a JSON array of what the student selected,
-// same index order as the answer key.
 model ExamScript {
   id                String   @id @default(uuid())
   studentId         String
@@ -331,7 +324,7 @@ model ExamScript {
   objectiveScore    Float?
   theoryScore       Float?
   totalScore        Float?
-  status            String   @default("draft") // draft | submitted
+  status            String   @default("draft")
   enteredById       String?
   enteredBy         Teacher? @relation(fields: [enteredById], references: [id])
   createdAt         DateTime @default(now())
@@ -340,8 +333,6 @@ model ExamScript {
   @@unique([studentId, subjectId, term])
 }
 
-// One row per student, per term — the compiled, ranked result.
-// status stays "pending" until the principal explicitly publishes it.
 model ResultPublication {
   id                  String   @id @default(uuid())
   studentId           String
@@ -352,10 +343,41 @@ model ResultPublication {
   position            Int?
   subjectsExpected    Int?
   subjectsSubmitted   Int?
-  status              String   @default("pending") // pending | published
+  status              String   @default("pending")
   publishedAt         DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@unique([studentId, term])
+}
+
+// ----------------------------------------------------------
+// DOCUMENTS — link-based for v1 (consistent with assignments),
+// browsable/labeled, structurally separate from academic data.
+// ----------------------------------------------------------
+model Document {
+  id            String   @id @default(uuid())
+  label         String
+  category      String   // e.g. "birth_certificate", "letter", "record"
+  fileUrl       String
+  uploadedById  String?
+  uploadedBy    AdminUser? @relation(fields: [uploadedById], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+// ----------------------------------------------------------
+// CONTENT / CMS — news/facts shown on the student dashboard.
+// Built into the admin dashboard itself, not a separate tool.
+// ----------------------------------------------------------
+model ContentPost {
+  id            String   @id @default(uuid())
+  title         String
+  body          String
+  imageUrl      String?
+  category      String?
+  published     Boolean  @default(false)
+  postedById    String?
+  postedBy      AdminUser? @relation(fields: [postedById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
