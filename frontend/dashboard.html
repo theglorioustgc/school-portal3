@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School Portal — Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="dashboard.html" class="active">Dashboard</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow" id="roleLabel">Loading…</div>
+      <h1 style="margin-bottom: 1.5rem;">You're logged in</h1>
+
+      <div class="card" style="max-width: 480px;">
+        <p class="text-slate" style="margin-bottom: 1rem;">
+          This confirms the full login flow works — your session token is stored and this page
+          checked it before showing you anything.
+        </p>
+        <p class="text-slate" style="margin-bottom: 1.5rem;">
+          Role-specific dashboards (with real timetable, attendance, grades, and more) come next.
+        </p>
+        <button class="btn-secondary" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    // Guard: if there's no token, this page shouldn't be reachable at all
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+
+    if (!token) {
+      window.location.href = 'index.html';
+    } else {
+      document.getElementById('roleLabel').textContent = `Logged in as: ${role}`;
+    }
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+  </script>
+</body>
+</html>
