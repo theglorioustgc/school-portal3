@@ -1,7 +1,8 @@
 // server.js
 //
-// This is the single entry point. Every future module (gradebook.js,
-// fees.js...) gets mounted here the same way the routes below are mounted.
+// This is the single entry point. Every future module (fees.js,
+// documents.js...) gets mounted here the same way the routes
+// below are mounted.
 
 require('dotenv').config();
 const express = require('express');
@@ -11,6 +12,7 @@ const authRoutes = require('./routes/auth');
 const classesRoutes = require('./routes/classes');
 const timetableRoutes = require('./routes/timetable');
 const attendanceRoutes = require('./routes/attendance');
+const gradebookRoutes = require('./routes/gradebook');
 
 const app = express();
 
@@ -25,8 +27,8 @@ app.use('/auth', authRoutes);
 app.use('/', classesRoutes);
 app.use('/', timetableRoutes);
 app.use('/', attendanceRoutes);
-// app.use('/gradebook', gradebookRoutes);   <- next module
-// app.use('/fees', feesRoutes);
+app.use('/', gradebookRoutes);
+// app.use('/fees', feesRoutes);   <- next module
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
