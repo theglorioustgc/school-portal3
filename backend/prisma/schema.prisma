@@ -56,6 +56,8 @@ model Student {
   gradeRecords      GradeRecord[]
   submissions       AssignmentSubmission[]
   feePayments       StudentFeePayment[]
+  examScripts       ExamScript[]
+  resultPublications ResultPublication[]
 }
 
 model Teacher {
@@ -78,6 +80,7 @@ model Teacher {
   announcements     Announcement[]
   assignmentsPosted Assignment[]
   eventsCreated     Event[]
+  examScriptsMarked ExamScript[]
 }
 
 model AdminUser {
@@ -115,6 +118,8 @@ model SchoolClass {
   gradeRecords GradeRecord[]
   announcements Announcement[]
   classAssignments Assignment[]
+  answerKeys  ExamAnswerKey[]
+  examScripts ExamScript[]
 }
 
 model Subject {
@@ -124,6 +129,8 @@ model Subject {
   timetableEntries TimetableEntry[]
   gradeRecords GradeRecord[]
   classAssignments Assignment[]
+  answerKeys  ExamAnswerKey[]
+  examScripts ExamScript[]
 }
 
 model TeacherAssignment {
@@ -259,9 +266,6 @@ model AlertLog {
   sentAt      DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// FEES — fully hands-off from actual payment processing.
-// ----------------------------------------------------------
 model FeeType {
   id          String   @id @default(uuid())
   name        String
@@ -288,4 +292,70 @@ model StudentFeePayment {
   updatedAt       DateTime @updatedAt
 
   @@unique([studentId, feeTypeId])
+}
+
+// ----------------------------------------------------------
+// EXAMS
+// ----------------------------------------------------------
+
+// One answer key per class+subject+term. "answers" is a JSON
+// string like ["A","C","B","D",...] — index 0 = question 1.
+model ExamAnswerKey {
+  id             String   @id @default(uuid())
+  classId        String
+  class          SchoolClass @relation(fields: [classId], references: [id])
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id])
+  term           String
+  answers        String   // JSON array of correct options
+  totalQuestions Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([classId, subjectId, term])
+}
+
+// One script per student, per subject, per term.
+// objectiveAnswers is a JSON array of what the student selected,
+// same index order as the answer key.
+model ExamScript {
+  id                String   @id @default(uuid())
+  studentId         String
+  student           Student  @relation(fields: [studentId], references: [id])
+  classId           String
+  class             SchoolClass @relation(fields: [classId], references: [id])
+  subjectId         String
+  subject           Subject  @relation(fields: [subjectId], references: [id])
+  term              String
+  objectiveAnswers  String?
+  objectiveScore    Float?
+  theoryScore       Float?
+  totalScore        Float?
+  status            String   @default("draft") // draft | submitted
+  enteredById       String?
+  enteredBy         Teacher? @relation(fields: [enteredById], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([studentId, subjectId, term])
+}
+
+// One row per student, per term — the compiled, ranked result.
+// status stays "pending" until the principal explicitly publishes it.
+model ResultPublication {
+  id                  String   @id @default(uuid())
+  studentId           String
+  student             Student  @relation(fields: [studentId], references: [id])
+  term                String
+  totalScore          Float?
+  average             Float?
+  position            Int?
+  subjectsExpected    Int?
+  subjectsSubmitted   Int?
+  status              String   @default("pending") // pending | published
+  publishedAt         DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([studentId, term])
 }
