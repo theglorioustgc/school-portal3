@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.25rem;
+    }
+    .stat-card .stat-number {
+      font-family: var(--font-display);
+      font-size: 2.1rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .stat-card .stat-label {
+      font-size: 0.8rem;
+      color: var(--slate);
+      margin-top: 0.2rem;
+    }
+    .quick-actions {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+    .search-row {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+      max-width: 420px;
+    }
+    .search-row input {
+      flex: 1;
+    }
+    .section-title {
+      font-size: 1.1rem;
+      margin-bottom: 0.9rem;
+    }
+    .empty-state {
+      color: var(--slate);
+      font-size: 0.88rem;
+      padding: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html" class="active">Dashboard</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Overview</h1>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-number" id="statStudents">—</div>
+          <div class="stat-label">Active students</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statTeachers">—</div>
+          <div class="stat-label">Teachers</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statClasses">—</div>
+          <div class="stat-label">Classes</div>
+        </div>
+      </div>
+
+      <div class="quick-actions">
+        <button class="btn-primary" onclick="alert('Register-student page comes next')">+ Add student</button>
+        <button class="btn-secondary" onclick="alert('Register-teacher page comes next')">+ Add teacher</button>
+        <button class="btn-secondary" onclick="alert('Announcements page comes next')">Post announcement</button>
+        <button class="btn-secondary" onclick="alert('Fees page comes next')">Fee confirmation</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Find a student</div>
+        <div class="search-row">
+          <input type="text" id="studentSearch" placeholder="Search by name or ID…" />
+          <button class="btn-secondary" id="searchBtn">Search</button>
+        </div>
+        <table id="studentTable">
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Class</th></tr>
+          </thead>
+          <tbody id="studentTableBody">
+            <tr><td colspan="3" class="empty-state">Loading students…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+
+    if (!token || role !== 'admin') {
+      window.location.href = 'index.html';
+    }
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Request failed');
+      return res.json();
+    }
+
+    function renderStudentRows(students) {
+      const body = document.getElementById('studentTableBody');
+      if (students.length === 0) {
+        body.innerHTML = '<tr><td colspan="3" class="empty-state">No students found.</td></tr>';
+        return;
+      }
+      body.innerHTML = students.map(s => `
+        <tr>
+          <td style="font-family: var(--font-mono); font-size: 0.85rem;">${s.studentId}</td>
+          <td>${s.firstName} ${s.lastName}</td>
+          <td>${s.class ? s.class.name : '—'}</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadOverview() {
+      try {
+        const [students, teachers, classes] = await Promise.all([
+          apiGet('/students'),
+          apiGet('/teachers'),
+          apiGet('/classes'),
+        ]);
+        document.getElementById('statStudents').textContent = students.length;
+        document.getElementById('statTeachers').textContent = teachers.length;
+        document.getElementById('statClasses').textContent = classes.length;
+        renderStudentRows(students.slice(0, 8));
+      } catch (err) {
+        document.getElementById('studentTableBody').innerHTML =
+          '<tr><td colspan="3" class="empty-state">Could not load data. Try refreshing.</td></tr>';
+      }
+    }
+
+    document.getElementById('searchBtn').addEventListener('click', async () => {
+      const q = document.getElementById('studentSearch').value.trim();
+      const students = await apiGet(`/students${q ? `?search=${encodeURIComponent(q)}` : ''}`);
+      renderStudentRows(students);
+    });
+
+    document.getElementById('studentSearch').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('searchBtn').click();
+    });
+
+    loadOverview();
+  </script>
+</body>
+</html>
