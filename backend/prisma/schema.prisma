@@ -1,7 +1,5 @@
 // ==========================================================
 // FOUNDATION SCHEMA
-// Every other module (fees, documents...) will add its own
-// tables that reference these by ID.
 // ==========================================================
 
 generator client {
@@ -78,6 +76,7 @@ model Teacher {
   gradesEntered     GradeRecord[]
   announcements     Announcement[]
   assignmentsPosted Assignment[]
+  eventsCreated     Event[]
 }
 
 model AdminUser {
@@ -90,6 +89,7 @@ model AdminUser {
   createdAt       DateTime @default(now())
 
   announcements   Announcement[]
+  eventsCreated   Event[]
 }
 
 model BursarUser {
@@ -202,11 +202,6 @@ model Announcement {
   createdAt           DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// ASSIGNMENTS — teacher posts to a class+subject they're
-// assigned to. Attachment is a plain link for v1 (no file
-// upload yet). Students "submit" by also providing a link.
-// ----------------------------------------------------------
 model Assignment {
   id            String   @id @default(uuid())
   title         String
@@ -234,4 +229,39 @@ model AssignmentSubmission {
   submittedAt   DateTime @default(now())
 
   @@unique([assignmentId, studentId])
+}
+
+// ----------------------------------------------------------
+// EVENTS — school calendar. Audience-scoped like announcements
+// (all/teachers/students/class). reminderSent tracks whether
+// the day-before reminder alert has already gone out, so a
+// scheduled job doesn't send it twice.
+// ----------------------------------------------------------
+model Event {
+  id                String   @id @default(uuid())
+  title             String
+  description       String?
+  eventDate         DateTime
+  audience          String   // "all" | "teachers" | "students" | "class"
+  classId           String?
+  createdByAdminId  String?
+  createdByAdmin    AdminUser? @relation(fields: [createdByAdminId], references: [id])
+  createdByTeacherId String?
+  createdByTeacher  Teacher? @relation(fields: [createdByTeacherId], references: [id])
+  reminderSent      Boolean  @default(false)
+  createdAt         DateTime @default(now())
+}
+
+// ----------------------------------------------------------
+// ALERT LOG — every notification the system has sent, for
+// admin visibility/audit. Not the notification itself (that's
+// utils/notify.js) — just a record that one went out.
+// ----------------------------------------------------------
+model AlertLog {
+  id          String   @id @default(uuid())
+  recipient   String   // email or phone the alert was sent to
+  channel     String   // "email" | "sms"
+  message     String
+  triggerType String   // "attendance_absent" | "grade_published" | "fee_status" | "announcement" | "event_reminder"
+  sentAt      DateTime @default(now())
 }
