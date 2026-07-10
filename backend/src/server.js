@@ -13,6 +13,7 @@ const classesRoutes = require('./routes/classes');
 const timetableRoutes = require('./routes/timetable');
 const attendanceRoutes = require('./routes/attendance');
 const gradebookRoutes = require('./routes/gradebook');
+const announcementsRoutes = require('./routes/announcements');
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/', classesRoutes);
 app.use('/', timetableRoutes);
 app.use('/', attendanceRoutes);
 app.use('/', gradebookRoutes);
+app.use('/', announcementsRoutes);
 // app.use('/fees', feesRoutes);   <- next module
 
 const PORT = process.env.PORT || 4000;
