@@ -17,6 +17,7 @@ const announcementsRoutes = require('./routes/announcements');
 const assignmentsRoutes = require('./routes/assignments');
 const eventsRoutes = require('./routes/events');
 const feesRoutes = require('./routes/fees');
+const examsRoutes = require('./routes/exams');
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use('/', announcementsRoutes);
 app.use('/', assignmentsRoutes);
 app.use('/', eventsRoutes);
 app.use('/', feesRoutes);
+app.use('/', examsRoutes);
 // app.use('/documents', documentsRoutes);   <- next module
 
 const PORT = process.env.PORT || 4000;
