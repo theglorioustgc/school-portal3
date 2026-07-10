@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Register — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .toggle-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .toggle-btn {
+      flex: 1;
+      padding: 0.6rem;
+      border-radius: 9px;
+      border: 1.5px solid var(--line);
+      background: var(--paper-raised);
+      color: var(--slate);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .toggle-btn.active {
+      background: var(--ink);
+      color: var(--paper);
+      border-color: var(--ink);
+    }
+    .result-card {
+      display: none;
+      background: rgba(47, 143, 91, 0.06);
+      border: 1px solid rgba(47, 143, 91, 0.25);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-top: 1.5rem;
+    }
+    .result-card.visible { display: block; }
+    .result-card .cred-row {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      margin: 0.3rem 0;
+    }
+    .result-card .cred-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--slate);
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html" class="active">Register</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Register someone new</h1>
+
+      <div class="card" style="max-width: 460px;">
+        <div class="toggle-row">
+          <button class="toggle-btn active" id="toggleStudent">Student</button>
+          <button class="toggle-btn" id="toggleTeacher">Teacher</button>
+        </div>
+
+        <div class="error-message" id="errorBox"></div>
+
+        <form id="registerForm">
+          <div class="field">
+            <label for="firstName">First name</label>
+            <input type="text" id="firstName" required />
+          </div>
+          <div class="field">
+            <label for="lastName">Last name</label>
+            <input type="text" id="lastName" required />
+          </div>
+
+          <div class="field" id="classField">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+
+          <div class="field" id="parentEmailField">
+            <label for="parentEmail">Parent email</label>
+            <input type="email" id="parentEmail" placeholder="parent@email.com" />
+          </div>
+
+          <div class="field" id="teacherEmailField" style="display: none;">
+            <label for="teacherEmail">Teacher email</label>
+            <input type="email" id="teacherEmail" placeholder="teacher@email.com" />
+          </div>
+
+          <button type="submit" class="btn-primary" id="submitBtn">Register student</button>
+        </form>
+
+        <div class="result-card" id="resultCard">
+          <div class="cred-label">Login ID</div>
+          <div class="cred-row" id="resultId"></div>
+          <div class="cred-label" style="margin-top: 0.6rem;">Temporary password</div>
+          <div class="cred-row" id="resultPassword"></div>
+          <p class="text-slate" style="margin-top: 0.8rem; font-size: 0.82rem;">
+            Share these with the parent or teacher — they'll be asked to change the password on first login.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    let mode = 'student';
+    const toggleStudent = document.getElementById('toggleStudent');
+    const toggleTeacher = document.getElementById('toggleTeacher');
+    const classField = document.getElementById('classField');
+    const parentEmailField = document.getElementById('parentEmailField');
+    const teacherEmailField = document.getElementById('teacherEmailField');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function setMode(newMode) {
+      mode = newMode;
+      toggleStudent.classList.toggle('active', mode === 'student');
+      toggleTeacher.classList.toggle('active', mode === 'teacher');
+      classField.style.display = mode === 'student' ? 'block' : 'none';
+      parentEmailField.style.display = mode === 'student' ? 'block' : 'none';
+      teacherEmailField.style.display = mode === 'teacher' ? 'block' : 'none';
+      submitBtn.textContent = mode === 'student' ? 'Register student' : 'Register teacher';
+      document.getElementById('resultCard').classList.remove('visible');
+    }
+
+    toggleStudent.addEventListener('click', () => setMode('student'));
+    toggleTeacher.addEventListener('click', () => setMode('teacher'));
+
+    async function loadClasses() {
+      const res = await fetch(`${API_BASE_URL}/classes`, { headers: { Authorization: `Bearer ${token}` } });
+      const classes = await res.json();
+      const select = document.getElementById('classSelect');
+      select.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+    loadClasses();
+
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('errorBox');
+      errorBox.classList.remove('visible');
+      document.getElementById('resultCard').classList.remove('visible');
+
+      const firstName = document.getElementById('firstName').value.trim();
+      const lastName = document.getElementById('lastName').value.trim();
+      const schoolCode = 'GHS'; // matches the code used throughout your existing IDs
+
+      const body = mode === 'student'
+        ? {
+            firstName, lastName, schoolCode,
+            classId: document.getElementById('classSelect').value,
+            parentEmail: document.getElementById('parentEmail').value.trim(),
+          }
+        : {
+            firstName, lastName, schoolCode,
+            email: document.getElementById('teacherEmail').value.trim(),
+          };
+
+      const endpoint = mode === 'student' ? '/auth/register/student' : '/auth/register/teacher';
+
+      try {
+        const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data.error || 'Something went wrong.';
+          errorBox.classList.add('visible');
+          return;
+        }
+
+        document.getElementById('resultId').textContent = data.studentId || data.teacherId;
+        document.getElementById('resultPassword').textContent = data.tempPassword;
+        document.getElementById('resultCard').classList.add('visible');
+        e.target.reset();
+      } catch (err) {
+        errorBox.textContent = 'Could not reach the server.';
+        errorBox.classList.add('visible');
+      }
+    });
+  </script>
+</body>
+</html>
