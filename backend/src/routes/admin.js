@@ -10,6 +10,42 @@ const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+// ------------------------------------------------------------------
+// STUDENT & TEACHER DIRECTORY — powers the admin dashboard's
+// at-a-glance numbers and search.
+// ------------------------------------------------------------------
+router.get('/students', requireAuth, requireRole('admin'), async (req, res) => {
+  const { search, classId } = req.query;
+  const where = { status: 'active' };
+  if (classId) where.classId = classId;
+  if (search) {
+    where.OR = [
+      { firstName: { contains: search, mode: 'insensitive' } },
+      { lastName: { contains: search, mode: 'insensitive' } },
+      { studentId: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+  const students = await prisma.student.findMany({
+    where,
+    include: { class: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json(students);
+});
+
+router.get('/teachers', requireAuth, requireRole('admin'), async (req, res) => {
+  const { search } = req.query;
+  const where = {};
+  if (search) {
+    where.OR = [
+      { firstName: { contains: search, mode: 'insensitive' } },
+      { lastName: { contains: search, mode: 'insensitive' } },
+      { teacherId: { contains: search, mode: 'insensitive' } },
+    ];
+  }
+  const teachers = await prisma.teacher.findMany({ where, orderBy: { createdAt: 'desc' } });
+  res.json(teachers);
+});
 
 // ------------------------------------------------------------------
 // DOCUMENTS
