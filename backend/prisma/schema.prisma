@@ -55,6 +55,7 @@ model Student {
   attendanceRecords AttendanceRecord[]
   gradeRecords      GradeRecord[]
   submissions       AssignmentSubmission[]
+  feePayments       StudentFeePayment[]
 }
 
 model Teacher {
@@ -90,6 +91,7 @@ model AdminUser {
 
   announcements   Announcement[]
   eventsCreated   Event[]
+  feePaymentsMarked StudentFeePayment[]
 }
 
 model BursarUser {
@@ -99,6 +101,8 @@ model BursarUser {
   lastName        String
   passwordHash    String
   createdAt       DateTime @default(now())
+
+  feePaymentsMarked StudentFeePayment[]
 }
 
 model SchoolClass {
@@ -231,18 +235,12 @@ model AssignmentSubmission {
   @@unique([assignmentId, studentId])
 }
 
-// ----------------------------------------------------------
-// EVENTS — school calendar. Audience-scoped like announcements
-// (all/teachers/students/class). reminderSent tracks whether
-// the day-before reminder alert has already gone out, so a
-// scheduled job doesn't send it twice.
-// ----------------------------------------------------------
 model Event {
   id                String   @id @default(uuid())
   title             String
   description       String?
   eventDate         DateTime
-  audience          String   // "all" | "teachers" | "students" | "class"
+  audience          String
   classId           String?
   createdByAdminId  String?
   createdByAdmin    AdminUser? @relation(fields: [createdByAdminId], references: [id])
@@ -252,16 +250,42 @@ model Event {
   createdAt         DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// ALERT LOG — every notification the system has sent, for
-// admin visibility/audit. Not the notification itself (that's
-// utils/notify.js) — just a record that one went out.
-// ----------------------------------------------------------
 model AlertLog {
   id          String   @id @default(uuid())
-  recipient   String   // email or phone the alert was sent to
-  channel     String   // "email" | "sms"
+  recipient   String
+  channel     String
   message     String
-  triggerType String   // "attendance_absent" | "grade_published" | "fee_status" | "announcement" | "event_reminder"
+  triggerType String
   sentAt      DateTime @default(now())
+}
+
+// ----------------------------------------------------------
+// FEES — fully hands-off from actual payment processing.
+// ----------------------------------------------------------
+model FeeType {
+  id          String   @id @default(uuid())
+  name        String
+  amount      Float?
+  term        String?
+  createdAt   DateTime @default(now())
+
+  payments    StudentFeePayment[]
+}
+
+model StudentFeePayment {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         Student  @relation(fields: [studentId], references: [id])
+  feeTypeId       String
+  feeType         FeeType  @relation(fields: [feeTypeId], references: [id])
+  status          String   @default("pending")
+  markedPaidByAdminId   String?
+  markedPaidByAdmin     AdminUser? @relation(fields: [markedPaidByAdminId], references: [id])
+  markedPaidByBursarId  String?
+  markedPaidByBursar    BursarUser? @relation(fields: [markedPaidByBursarId], references: [id])
+  markedPaidAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([studentId, feeTypeId])
 }
