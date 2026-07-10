@@ -75,6 +75,7 @@ model Teacher {
   timetableEntries  TimetableEntry[]
   attendanceMarked  AttendanceRecord[]
   gradesEntered     GradeRecord[]
+  announcements     Announcement[]
 }
 
 model AdminUser {
@@ -85,6 +86,8 @@ model AdminUser {
   role            String   @default("admin")
   passwordHash    String
   createdAt       DateTime @default(now())
+
+  announcements   Announcement[]
 }
 
 model BursarUser {
@@ -104,6 +107,7 @@ model SchoolClass {
   timetableEntries TimetableEntry[]
   attendanceRecords AttendanceRecord[]
   gradeRecords GradeRecord[]
+  announcements Announcement[]
 }
 
 model Subject {
@@ -157,12 +161,6 @@ model AttendanceRecord {
   @@unique([studentId, date])
 }
 
-// ----------------------------------------------------------
-// GRADEBOOK — one row per student, per subject, per term.
-// draft -> submitted, same pattern as attendance's permission
-// check: only the teacher assigned to this class+subject
-// (or an admin) can write to it.
-// ----------------------------------------------------------
 model GradeRecord {
   id            String   @id @default(uuid())
   studentId     String
@@ -171,17 +169,39 @@ model GradeRecord {
   class         SchoolClass @relation(fields: [classId], references: [id])
   subjectId     String
   subject       Subject  @relation(fields: [subjectId], references: [id])
-  term          String   // e.g. "Term 2, 2026"
+  term          String
   ca1           Float?
   ca2           Float?
   ca3           Float?
   exam          Float?
-  total         Float?   // computed: ca1+ca2+ca3+exam
-  status        String   @default("draft") // "draft" | "submitted"
+  total         Float?
+  status        String   @default("draft")
   enteredById   String?
   enteredBy     Teacher? @relation(fields: [enteredById], references: [id])
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@unique([studentId, subjectId, term])
+}
+
+// ----------------------------------------------------------
+// ANNOUNCEMENTS — audience-scoped: "all" | "teachers" | "students" | "class"
+// Admin can post to any audience. Teachers can only post to
+// "class" audience, and only for a class they're assigned to
+// (checked in route logic, same pattern as attendance/gradebook).
+// createdByAdminId / createdByTeacherId: exactly one is set,
+// depending on who posted it.
+// ----------------------------------------------------------
+model Announcement {
+  id                  String   @id @default(uuid())
+  title               String
+  body                String
+  audience            String   // "all" | "teachers" | "students" | "class"
+  classId             String?
+  class               SchoolClass? @relation(fields: [classId], references: [id])
+  createdByAdminId    String?
+  createdByAdmin      AdminUser? @relation(fields: [createdByAdminId], references: [id])
+  createdByTeacherId  String?
+  createdByTeacher    Teacher? @relation(fields: [createdByTeacherId], references: [id])
+  createdAt           DateTime @default(now())
 }
