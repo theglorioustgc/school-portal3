@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Announcements — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .announcement-item {
+      border-bottom: 1px solid var(--line);
+      padding: 1rem 0;
+    }
+    .announcement-item:last-child { border-bottom: none; }
+    .announcement-item h3 {
+      font-size: 1rem;
+      margin-bottom: 0.3rem;
+    }
+    .announcement-item .meta {
+      font-size: 0.75rem;
+      color: var(--slate);
+      margin-bottom: 0.4rem;
+    }
+    .announcement-item p {
+      font-size: 0.9rem;
+      color: var(--ink-soft);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="announcements.html" class="active">Announcements</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Announcements</h1>
+
+      <div class="layout">
+        <div class="card">
+          <div class="section-title" style="font-size:1.05rem; margin-bottom:1rem;">Post a new announcement</div>
+
+          <div class="error-message" id="errorBox"></div>
+          <div class="success-message" id="successBox"></div>
+
+          <form id="announceForm">
+            <div class="field">
+              <label for="title">Title</label>
+              <input type="text" id="title" required />
+            </div>
+            <div class="field">
+              <label for="body">Message</label>
+              <textarea id="body" rows="4" required></textarea>
+            </div>
+            <div class="field">
+              <label for="audience">Audience</label>
+              <select id="audience">
+                <option value="all">Everyone</option>
+                <option value="teachers">Teachers only</option>
+                <option value="students">Students only</option>
+                <option value="class">One class</option>
+              </select>
+            </div>
+            <div class="field" id="classField" style="display:none;">
+              <label for="classSelect">Class</label>
+              <select id="classSelect"></select>
+            </div>
+            <button type="submit" class="btn-primary" id="submitBtn">Post announcement</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="section-title" style="font-size:1.05rem; margin-bottom:0.5rem;">Recent announcements</div>
+          <div id="announcementList">
+            <p class="empty-state">Loading…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    const audienceSelect = document.getElementById('audience');
+    const classField = document.getElementById('classField');
+    audienceSelect.addEventListener('change', () => {
+      classField.style.display = audienceSelect.value === 'class' ? 'block' : 'none';
+    });
+
+    async function loadClasses() {
+      const res = await fetch(`${API_BASE_URL}/classes`, { headers: { Authorization: `Bearer ${token}` } });
+      const classes = await res.json();
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+    loadClasses();
+
+    function timeAgo(dateStr) {
+      const diffMs = Date.now() - new Date(dateStr).getTime();
+      const mins = Math.floor(diffMs / 60000);
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return `${Math.floor(hours / 24)}d ago`;
+    }
+
+    async function loadAnnouncements() {
+      const res = await fetch(`${API_BASE_URL}/announcements`, { headers: { Authorization: `Bearer ${token}` } });
+      const list = await res.json();
+      const container = document.getElementById('announcementList');
+      if (list.length === 0) {
+        container.innerHTML = '<p class="empty-state">No announcements yet.</p>';
+        return;
+      }
+      container.innerHTML = list.map(a => `
+        <div class="announcement-item">
+          <h3>${a.title}</h3>
+          <div class="meta">${a.audience} · ${timeAgo(a.createdAt)}</div>
+          <p>${a.body}</p>
+        </div>
+      `).join('');
+    }
+    loadAnnouncements();
+
+    document.getElementById('announceForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('errorBox');
+      const successBox = document.getElementById('successBox');
+      errorBox.classList.remove('visible');
+      successBox.classList.remove('visible');
+
+      const body = {
+        title: document.getElementById('title').value.trim(),
+        body: document.getElementById('body').value.trim(),
+        audience: audienceSelect.value,
+      };
+      if (audienceSelect.value === 'class') {
+        body.classId = document.getElementById('classSelect').value;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/announcements`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data.error || 'Something went wrong.';
+          errorBox.classList.add('visible');
+          return;
+        }
+
+        successBox.textContent = 'Announcement posted.';
+        successBox.classList.add('visible');
+        e.target.reset();
+        classField.style.display = 'none';
+        loadAnnouncements();
+      } catch (err) {
+        errorBox.textContent = 'Could not reach the server.';
+        errorBox.classList.add('visible');
+      }
+    });
+  </script>
+</body>
+</html>
