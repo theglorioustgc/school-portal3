@@ -83,5 +83,27 @@ router.post('/attendance/mark', requireAuth, requireRole('admin', 'teacher'), as
 
   res.status(201).json({ success: true, count: results.length });
 });
+// ------------------------------------------------------------------
+   // GET /attendance/mine — a student's own attendance rate over the
+   // last 30 days. Same window/logic as the early-warning flag check,
+   // just exposed read-only to the student themselves.
+   // ------------------------------------------------------------------
+   router.get('/attendance/mine', requireAuth, requireRole('student'), async (req, res) => {
+     const thirtyDaysAgo = new Date();
+     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+     const records = await prisma.attendanceRecord.findMany({
+       where: { studentId: req.user.id, date: { gte: thirtyDaysAgo } },
+     });
+
+     if (records.length === 0) {
+       return res.json({ rate: null, present: 0, absent: 0, total: 0 });
+     }
+
+     const absent = records.filter((r) => r.status === 'absent').length;
+     const present = records.length - absent;
+     const rate = present / records.length;
+
+     res.json({ rate, present, absent, total: records.length });
+   });
 module.exports = router;
