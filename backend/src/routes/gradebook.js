@@ -1,15 +1,3 @@
-// gradebook.js
-//
-// Draft -> submitted flow for CA1/CA2/CA3/exam scores.
-// Same permission rule as attendance: only the teacher assigned
-// to this specific class+subject (or an admin) can write to it —
-// but here it's subject-specific, unlike attendance which is
-// any-subject-assigned.
-//
-// Submitted records lock (can't be edited directly) — reopening
-// requires an explicit admin action, so there's always a clear
-// audit trail of who unlocked what.
-
 const express = require('express');
 const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -36,7 +24,7 @@ function computeTotal({ ca1, ca2, ca3, exam }) {
 // ------------------------------------------------------------------
 // GET /gradebook?classId=xxx&subjectId=xxx&term=xxx -> whole class's scores
 // ------------------------------------------------------------------
-router.get('/gradebook', requireAuth, async (req, res) => {
+router.get('/gradebook', requireAuth, requireRole('admin', 'teacher'), async (req, res) => {
   const { classId, subjectId, term } = req.query;
   if (!classId || !subjectId || !term) {
     return res.status(400).json({ error: 'classId, subjectId, and term query params are required' });
@@ -125,5 +113,21 @@ router.post('/gradebook/reopen', requireAuth, requireRole('admin'), async (req, 
 
   res.json(record);
 });
+
+// ------------------------------------------------------------------
+   // GET /gradebook/mine — a student's own submitted grades for a term.
+   // Draft (still-being-entered) records are hidden — only finished
+   // ones show, same spirit as the exam publish gate.
+   // ------------------------------------------------------------------
+   router.get('/gradebook/mine', requireAuth, requireRole('student'), async (req, res) => {
+     const { term } = req.query;
+     if (!term) return res.status(400).json({ error: 'term query param is required' });
+
+     const records = await prisma.gradeRecord.findMany({
+       where: { studentId: req.user.id, term, status: 'submitted' },
+       include: { subject: true },
+     });
+     res.json(records);
+   });
 
 module.exports = router;
