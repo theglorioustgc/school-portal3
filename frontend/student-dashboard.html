@@ -113,78 +113,102 @@
     }
 
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const todayName = days[new Date().getDay()];
+   const todayName = days[new Date().getDay()];
+   let myClassId = null;
 
-    async function loadTimetable() {
-      try {
-        const entries = await apiGet('/timetable');
-        const today = entries.filter(e => e.dayOfWeek === todayName).sort((a, b) => a.periodNumber - b.periodNumber);
-        const container = document.getElementById('timetableList');
-        if (today.length === 0) {
-          container.innerHTML = `<p class="empty-state">No classes scheduled for ${todayName}.</p>`;
-          return;
-        }
-        container.innerHTML = today.map(e => `
-          <div class="period-row">
-            <span>${e.subject.name}</span>
-            <span class="period-time">Period ${e.periodNumber}</span>
-          </div>
-        `).join('');
-      } catch (err) {
-        document.getElementById('timetableList').innerHTML = '<p class="empty-state">Could not load timetable.</p>';
-      }
-    }
+   async function loadProfile() {
+     try {
+       const me = await apiGet('/auth/me');
+       document.getElementById('studentName').textContent = `Welcome, ${me.firstName}`;
+       document.getElementById('welcomeLabel').textContent = me.className ? `Student · ${me.className}` : 'Student';
+       myClassId = me.classId;
+     } catch (err) {
+       document.getElementById('studentName').textContent = 'Welcome';
+     }
+   }
 
-    async function loadAssignments() {
-      try {
-        const assignments = await apiGet('/assignments');
-        const container = document.getElementById('assignmentList');
-        if (assignments.length === 0) {
-          container.innerHTML = '<p class="empty-state">No assignments right now.</p>';
-          return;
-        }
-        container.innerHTML = assignments.slice(0, 6).map(a => `
-          <div class="assignment-row">
-            <div>${a.title}</div>
-            <div class="due">${a.subject.name} · due ${new Date(a.dueDate).toLocaleDateString()}</div>
-          </div>
-        `).join('');
-      } catch (err) {
-        document.getElementById('assignmentList').innerHTML = '<p class="empty-state">Could not load assignments.</p>';
-      }
-    }
+   async function loadTimetable() {
+     try {
+       if (!myClassId) { document.getElementById('timetableList').innerHTML = '<p class="empty-state">No class assigned yet.</p>'; return; }
+       const entries = await apiGet(`/timetable?classId=${myClassId}`);
+       const today = entries.filter(e => e.dayOfWeek === todayName).sort((a, b) => a.periodNumber - b.periodNumber);
+       const container = document.getElementById('timetableList');
+       if (today.length === 0) {
+         container.innerHTML = `<p class="empty-state">No classes scheduled for ${todayName}.</p>`;
+         return;
+       }
+       container.innerHTML = today.map(e => `
+         <div class="period-row">
+           <span>${e.subject.name}</span>
+           <span class="period-time">Period ${e.periodNumber}</span>
+         </div>
+       `).join('');
+     } catch (err) {
+       document.getElementById('timetableList').innerHTML = '<p class="empty-state">Could not load timetable.</p>';
+     }
+   }
 
-    async function loadAnnouncements() {
-      try {
-        const list = await apiGet('/announcements');
-        const container = document.getElementById('announcementList');
-        if (list.length === 0) {
-          container.innerHTML = '<p class="empty-state">No announcements yet.</p>';
-          return;
-        }
-        container.innerHTML = list.slice(0, 6).map(a => `
-          <div class="announcement-row">
-            <div>${a.title}</div>
-            <div class="due">${a.body}</div>
-          </div>
-        `).join('');
-      } catch (err) {
-        document.getElementById('announcementList').innerHTML = '<p class="empty-state">Could not load announcements.</p>';
-      }
-    }
+   async function loadAssignments() {
+     try {
+       if (!myClassId) { document.getElementById('assignmentList').innerHTML = '<p class="empty-state">No class assigned yet.</p>'; return; }
+       const assignments = await apiGet(`/assignments?classId=${myClassId}`);
+       const container = document.getElementById('assignmentList');
+       if (assignments.length === 0) {
+         container.innerHTML = '<p class="empty-state">No assignments right now.</p>';
+         return;
+       }
+       container.innerHTML = assignments.slice(0, 6).map(a => `
+         <div class="assignment-row">
+           <div>${a.title}</div>
+           <div class="due">${a.subject.name} · due ${new Date(a.dueDate).toLocaleDateString()}</div>
+         </div>
+       `).join('');
+     } catch (err) {
+       document.getElementById('assignmentList').innerHTML = '<p class="empty-state">Could not load assignments.</p>';
+     }
+   }
 
-    async function loadAttendance() {
-      // Uses the same /attendance endpoint, but scoped by asking for
-      // a wide date range isn't supported yet server-side per-student,
-      // so for now we show a friendly placeholder until that endpoint exists.
-      document.getElementById('attendanceRate').textContent = '—';
-      document.getElementById('attendanceDetail').textContent = 'Detailed attendance view coming soon.';
-    }
+   async function loadAnnouncements() {
+     try {
+       const list = await apiGet('/announcements');
+       const container = document.getElementById('announcementList');
+       if (list.length === 0) {
+         container.innerHTML = '<p class="empty-state">No announcements yet.</p>';
+         return;
+       }
+       container.innerHTML = list.slice(0, 6).map(a => `
+         <div class="announcement-row">
+           <div>${a.title}</div>
+           <div class="due">${a.body}</div>
+         </div>
+       `).join('');
+     } catch (err) {
+       document.getElementById('announcementList').innerHTML = '<p class="empty-state">Could not load announcements.</p>';
+     }
+   }
 
-    loadTimetable();
-    loadAssignments();
-    loadAnnouncements();
-    loadAttendance();
+   async function loadAttendance() {
+     try {
+       const data = await apiGet('/attendance/mine');
+       if (data.rate === null) {
+         document.getElementById('attendanceRate').textContent = '—';
+         document.getElementById('attendanceDetail').textContent = 'No attendance recorded yet.';
+         return;
+       }
+       document.getElementById('attendanceRate').textContent = `${Math.round(data.rate * 100)}%`;
+       document.getElementById('attendanceDetail').textContent = `${data.present} present, ${data.absent} absent out of ${data.total} days recorded.`;
+     } catch (err) {
+       document.getElementById('attendanceDetail').textContent = 'Could not load attendance.';
+     }
+   }
+
+   (async function init() {
+     await loadProfile();
+     loadTimetable();
+     loadAssignments();
+     loadAnnouncements();
+     loadAttendance();
+   })();
   </script>
 </body>
 </html>
