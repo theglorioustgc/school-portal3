@@ -197,4 +197,29 @@ router.post('/change-password', requireAuth, async (req, res) => {
   return res.json({ success: true });
 });
 
+// ------------------------------------------------------------------
+   // GET /auth/me — the logged-in user's own basic profile.
+   // Works for any role; shape differs slightly since roles differ.
+   // ------------------------------------------------------------------
+   router.get('/me', requireAuth, async (req, res) => {
+     const { id, role } = req.user;
+
+     if (role === 'student') {
+       const student = await prisma.student.findUnique({ where: { id }, include: { class: true } });
+       return res.json({ role, firstName: student.firstName, lastName: student.lastName, classId: student.classId, className: student.class?.name || null });
+     }
+     if (role === 'teacher') {
+       const teacher = await prisma.teacher.findUnique({ where: { id } });
+       return res.json({ role, firstName: teacher.firstName, lastName: teacher.lastName });
+     }
+     if (role === 'admin') {
+       const admin = await prisma.adminUser.findUnique({ where: { id } });
+       return res.json({ role, firstName: admin.firstName, lastName: admin.lastName });
+     }
+     if (role === 'bursar') {
+       const bursar = await prisma.bursarUser.findUnique({ where: { id } });
+       return res.json({ role, firstName: bursar.firstName, lastName: bursar.lastName });
+     }
+     res.status(400).json({ error: 'Unknown role' });
+   });
 module.exports = router;
