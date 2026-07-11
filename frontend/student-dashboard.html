@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Dashboard — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .card h2 {
+      font-size: 1.05rem;
+      margin-bottom: 1rem;
+    }
+    .period-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.9rem;
+    }
+    .period-row:last-child { border-bottom: none; }
+    .period-time { color: var(--slate); font-family: var(--font-mono); font-size: 0.8rem; }
+    .attendance-ring {
+      display: flex;
+      align-items: baseline;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+    }
+    .attendance-ring .big-number {
+      font-family: var(--font-display);
+      font-size: 2.2rem;
+      font-weight: 600;
+    }
+    .assignment-row, .announcement-row {
+      padding: 0.7rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .assignment-row:last-child, .announcement-row:last-child { border-bottom: none; }
+    .assignment-row .due {
+      font-size: 0.75rem;
+      color: var(--slate);
+    }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="student-dashboard.html" class="active">Dashboard</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow" id="welcomeLabel">Student</div>
+      <h1 style="margin-bottom: 1.5rem;" id="studentName">Welcome</h1>
+
+      <div class="layout">
+        <div class="card">
+          <h2>Today's timetable</h2>
+          <div id="timetableList"><p class="empty-state">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <h2>Attendance (last 30 days)</h2>
+          <div class="attendance-ring">
+            <div class="big-number" id="attendanceRate">—</div>
+            <div class="text-slate">present rate</div>
+          </div>
+          <p class="text-slate" id="attendanceDetail" style="font-size: 0.85rem;"></p>
+        </div>
+
+        <div class="card">
+          <h2>Assignments</h2>
+          <div id="assignmentList"><p class="empty-state">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <h2>Announcements</h2>
+          <div id="announcementList"><p class="empty-state">Loading…</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'student') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Request failed');
+      return res.json();
+    }
+
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const todayName = days[new Date().getDay()];
+
+    async function loadTimetable() {
+      try {
+        const entries = await apiGet('/timetable');
+        const today = entries.filter(e => e.dayOfWeek === todayName).sort((a, b) => a.periodNumber - b.periodNumber);
+        const container = document.getElementById('timetableList');
+        if (today.length === 0) {
+          container.innerHTML = `<p class="empty-state">No classes scheduled for ${todayName}.</p>`;
+          return;
+        }
+        container.innerHTML = today.map(e => `
+          <div class="period-row">
+            <span>${e.subject.name}</span>
+            <span class="period-time">Period ${e.periodNumber}</span>
+          </div>
+        `).join('');
+      } catch (err) {
+        document.getElementById('timetableList').innerHTML = '<p class="empty-state">Could not load timetable.</p>';
+      }
+    }
+
+    async function loadAssignments() {
+      try {
+        const assignments = await apiGet('/assignments');
+        const container = document.getElementById('assignmentList');
+        if (assignments.length === 0) {
+          container.innerHTML = '<p class="empty-state">No assignments right now.</p>';
+          return;
+        }
+        container.innerHTML = assignments.slice(0, 6).map(a => `
+          <div class="assignment-row">
+            <div>${a.title}</div>
+            <div class="due">${a.subject.name} · due ${new Date(a.dueDate).toLocaleDateString()}</div>
+          </div>
+        `).join('');
+      } catch (err) {
+        document.getElementById('assignmentList').innerHTML = '<p class="empty-state">Could not load assignments.</p>';
+      }
+    }
+
+    async function loadAnnouncements() {
+      try {
+        const list = await apiGet('/announcements');
+        const container = document.getElementById('announcementList');
+        if (list.length === 0) {
+          container.innerHTML = '<p class="empty-state">No announcements yet.</p>';
+          return;
+        }
+        container.innerHTML = list.slice(0, 6).map(a => `
+          <div class="announcement-row">
+            <div>${a.title}</div>
+            <div class="due">${a.body}</div>
+          </div>
+        `).join('');
+      } catch (err) {
+        document.getElementById('announcementList').innerHTML = '<p class="empty-state">Could not load announcements.</p>';
+      }
+    }
+
+    async function loadAttendance() {
+      // Uses the same /attendance endpoint, but scoped by asking for
+      // a wide date range isn't supported yet server-side per-student,
+      // so for now we show a friendly placeholder until that endpoint exists.
+      document.getElementById('attendanceRate').textContent = '—';
+      document.getElementById('attendanceDetail').textContent = 'Detailed attendance view coming soon.';
+    }
+
+    loadTimetable();
+    loadAssignments();
+    loadAnnouncements();
+    loadAttendance();
+  </script>
+</body>
+</html>
