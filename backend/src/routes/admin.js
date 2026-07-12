@@ -14,10 +14,20 @@ const router = express.Router();
 // STUDENT & TEACHER DIRECTORY — powers the admin dashboard's
 // at-a-glance numbers and search.
 // ------------------------------------------------------------------
-router.get('/students', requireAuth, requireRole('admin'), async (req, res) => {
-  const { search, classId } = req.query;
-  const where = { status: 'active' };
-  if (classId) where.classId = classId;
+router.get('/students', requireAuth, requireRole('admin', 'teacher'), async (req, res) => {
+     const { search, classId } = req.query;
+     const where = { status: 'active' };
+
+     if (req.user.role === 'teacher') {
+       // Teachers can only ever list students in a class they're actually assigned to
+       if (!classId) return res.status(400).json({ error: 'classId is required for teachers' });
+       const assignment = await prisma.teacherAssignment.findFirst({
+         where: { teacherId: req.user.id, classId },
+       });
+       if (!assignment) return res.status(403).json({ error: 'You are not assigned to this class' });
+     }
+
+     if (classId) where.classId = classId;
   if (search) {
     where.OR = [
       { firstName: { contains: search, mode: 'insensitive' } },
