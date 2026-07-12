@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bursar Dashboard — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .filter-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-end;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    .filter-row .field { margin-bottom: 0; min-width: 200px; }
+    .progress-summary {
+      font-size: 0.9rem;
+      color: var(--slate);
+      margin-bottom: 1rem;
+    }
+    .progress-summary strong { color: var(--ink); }
+    .toggle-paid {
+      padding: 0.35rem 0.9rem;
+      border-radius: 100px;
+      border: 1.5px solid var(--line);
+      background: var(--paper-raised);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .toggle-paid.is-paid {
+      background: rgba(47, 143, 91, 0.12);
+      color: var(--success);
+      border-color: rgba(47, 143, 91, 0.3);
+    }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="bursar-dashboard.html" class="active">Fee confirmation</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Bursar</div>
+      <h1 style="margin-bottom: 1.5rem;" id="welcomeTitle">Fee confirmation</h1>
+
+      <div class="card">
+        <div class="filter-row">
+          <div class="field">
+            <label for="feeTypeSelect">Fee type</label>
+            <select id="feeTypeSelect"></select>
+          </div>
+          <div class="field">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+          <button class="btn-secondary" id="loadBtn">Load</button>
+        </div>
+
+        <div class="progress-summary" id="progressSummary"></div>
+
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="feeTableBody">
+            <tr><td colspan="4" class="empty-state">Choose a fee type and class, then click Load.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'bursar') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+
+    async function loadProfile() {
+      try {
+        const me = await apiGet('/auth/me');
+        document.getElementById('welcomeTitle').textContent = `Welcome, ${me.firstName}`;
+      } catch (err) {}
+    }
+
+    async function loadFeeTypes() {
+      const feeTypes = await apiGet('/fee-types');
+      document.getElementById('feeTypeSelect').innerHTML = feeTypes.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+    }
+
+    async function loadClasses() {
+      const classes = await apiGet('/classes');
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+
+    async function loadFeeStatus() {
+      const feeTypeId = document.getElementById('feeTypeSelect').value;
+      const classId = document.getElementById('classSelect').value;
+      if (!feeTypeId || !classId) return;
+
+      const data = await apiGet(`/fees/class/${classId}?feeTypeId=${feeTypeId}`);
+      document.getElementById('progressSummary').innerHTML =
+        `<strong>${data.paidCount}</strong> of <strong>${data.totalCount}</strong> paid`;
+
+      const body = document.getElementById('feeTableBody');
+      if (data.students.length === 0) {
+        body.innerHTML = '<tr><td colspan="4" class="empty-state">No students in this class.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = data.students.map(s => `
+        <tr>
+          <td style="font-family: var(--font-mono); font-size: 0.85rem;">${s.studentDisplayId}</td>
+          <td>${s.firstName} ${s.lastName}</td>
+          <td><span class="pill ${s.status === 'paid' ? 'pill-success' : 'pill-pending'}">${s.status}</span></td>
+          <td>
+            <button class="toggle-paid ${s.status === 'paid' ? 'is-paid' : ''}" data-student="${s.studentId}" data-status="${s.status}">
+              ${s.status === 'paid' ? 'Mark pending' : 'Mark paid'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      document.querySelectorAll('.toggle-paid').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const studentId = btn.dataset.student;
+          const currentStatus = btn.dataset.status;
+          const newStatus = currentStatus === 'paid' ? 'pending' : 'paid';
+
+          btn.disabled = true;
+          await fetch(`${API_BASE_URL}/fees/mark`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ studentId, feeTypeId, status: newStatus }),
+          });
+          loadFeeStatus();
+        });
+      });
+    }
+
+    document.getElementById('loadBtn').addEventListener('click', loadFeeStatus);
+
+    (async function init() {
+      await loadProfile();
+      await loadFeeTypes();
+      await loadClasses();
+      await loadFeeStatus();
+    })();
+  </script>
+</body>
+</html>
