@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Dashboard — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .card h2 { font-size: 1.05rem; margin-bottom: 1rem; }
+    .period-row {
+      display: flex; justify-content: space-between;
+      padding: 0.6rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem;
+    }
+    .period-row:last-child { border-bottom: none; }
+    .period-time { color: var(--slate); font-family: var(--font-mono); font-size: 0.8rem; }
+    .assignment-item { list-style: none; }
+    .class-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.7rem 0; border-bottom: 1px solid var(--line);
+    }
+    .class-item:last-child { border-bottom: none; }
+    .class-item .btn-secondary { font-size: 0.8rem; padding: 0.4rem 0.8rem; }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+
+    .panel {
+      display: none;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+    }
+    .panel.visible { display: block; }
+    .student-check-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem;
+    }
+    .status-btn {
+      padding: 0.3rem 0.7rem; border-radius: 100px; border: 1.5px solid var(--line);
+      background: var(--paper-raised); font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-left: 0.3rem;
+    }
+    .status-btn.selected.present { background: rgba(47,143,91,0.15); color: var(--success); border-color: rgba(47,143,91,0.3); }
+    .status-btn.selected.absent { background: rgba(193,68,60,0.12); color: var(--error); border-color: rgba(193,68,60,0.3); }
+    .full-width-card { grid-column: 1 / -1; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="teacher-dashboard.html" class="active">Dashboard</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Teacher</div>
+      <h1 style="margin-bottom: 1.5rem;" id="teacherName">Welcome</h1>
+
+      <div class="layout">
+        <div class="card">
+          <h2>Today's schedule</h2>
+          <div id="scheduleList"><p class="empty-state">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <h2>Your classes</h2>
+          <div id="classList"><p class="empty-state">Loading…</p></div>
+        </div>
+
+        <div class="card full-width-card">
+          <h2>Attendance &amp; assignments</h2>
+          <p class="text-slate" style="font-size: 0.88rem;">Pick a class above to mark attendance or post an assignment.</p>
+
+          <div class="panel" id="attendancePanel">
+            <div class="field" style="max-width: 220px;">
+              <label for="attendanceDate">Date</label>
+              <input type="date" id="attendanceDate" />
+            </div>
+            <div id="studentCheckList"></div>
+            <button class="btn-primary" id="saveAttendanceBtn" style="margin-top: 1rem;">Save attendance</button>
+            <div class="success-message" id="attendanceSuccess" style="margin-top: 0.8rem;">Attendance saved.</div>
+          </div>
+
+          <div class="panel" id="assignmentPanel">
+            <div class="field">
+              <label for="assignTitle">Title</label>
+              <input type="text" id="assignTitle" />
+            </div>
+            <div class="field">
+              <label for="assignDesc">Description</label>
+              <textarea id="assignDesc" rows="3"></textarea>
+            </div>
+            <div class="field">
+              <label for="assignDue">Due date</label>
+              <input type="date" id="assignDue" />
+            </div>
+            <button class="btn-primary" id="postAssignmentBtn">Post assignment</button>
+            <div class="success-message" id="assignmentSuccess" style="margin-top: 0.8rem;">Assignment posted.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'teacher') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    let myId = null;
+    let selectedClassId = null;
+    let selectedSubjectId = null;
+    let studentStatuses = {};
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('Request failed');
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    }
+
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const todayName = days[new Date().getDay()];
+
+    async function loadProfile() {
+      const me = await apiGet('/auth/me');
+      myId = me.id;
+      document.getElementById('teacherName').textContent = `Welcome, ${me.firstName}`;
+    }
+
+    async function loadSchedule() {
+      try {
+        const entries = await apiGet(`/timetable?teacherId=${myId}`);
+        const today = entries.filter(e => e.dayOfWeek === todayName).sort((a, b) => a.periodNumber - b.periodNumber);
+        const container = document.getElementById('scheduleList');
+        if (today.length === 0) {
+          container.innerHTML = `<p class="empty-state">Nothing scheduled for ${todayName}.</p>`;
+          return;
+        }
+        container.innerHTML = today.map(e => `
+          <div class="period-row">
+            <span>${e.subject.name} · ${e.class.name}</span>
+            <span class="period-time">Period ${e.periodNumber}</span>
+          </div>
+        `).join('');
+      } catch (err) {
+        document.getElementById('scheduleList').innerHTML = '<p class="empty-state">Could not load schedule.</p>';
+      }
+    }
+
+    async function loadClasses() {
+      try {
+        const assignments = await apiGet(`/teacher-assignments?teacherId=${myId}`);
+        const container = document.getElementById('classList');
+        if (assignments.length === 0) {
+          container.innerHTML = '<p class="empty-state">No classes assigned yet.</p>';
+          return;
+        }
+        container.innerHTML = assignments.map(a => `
+          <div class="class-item">
+            <span>${a.subject.name} · ${a.class.name}</span>
+            <span>
+              <button class="btn-secondary open-attendance" data-class="${a.classId}">Attendance</button>
+              <button class="btn-secondary open-assignment" data-class="${a.classId}" data-subject="${a.subjectId}">Assign</button>
+            </span>
+          </div>
+        `).join('');
+
+        document.querySelectorAll('.open-attendance').forEach(btn => {
+          btn.addEventListener('click', () => openAttendance(btn.dataset.class));
+        });
+        document.querySelectorAll('.open-assignment').forEach(btn => {
+          btn.addEventListener('click', () => openAssignment(btn.dataset.class, btn.dataset.subject));
+        });
+      } catch (err) {
+        document.getElementById('classList').innerHTML = '<p class="empty-state">Could not load classes.</p>';
+      }
+    }
+
+    async function openAttendance(classId) {
+      selectedClassId = classId;
+      studentStatuses = {};
+      document.getElementById('attendancePanel').classList.add('visible');
+      document.getElementById('assignmentPanel').classList.remove('visible');
+      document.getElementById('attendanceDate').value = new Date().toISOString().split('T')[0];
+
+      const students = await apiGet(`/students?classId=${classId}`);
+      const container = document.getElementById('studentCheckList');
+      container.innerHTML = students.map(s => {
+        studentStatuses[s.id] = 'present';
+        return `
+          <div class="student-check-row">
+            <span>${s.firstName} ${s.lastName}</span>
+            <span>
+              <button class="status-btn selected present" data-student="${s.id}" data-status="present">Present</button>
+              <button class="status-btn" data-student="${s.id}" data-status="absent">Absent</button>
+            </span>
+          </div>
+        `;
+      }).join('');
+
+      container.querySelectorAll('.status-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const studentId = btn.dataset.student;
+          const status = btn.dataset.status;
+          studentStatuses[studentId] = status;
+          container.querySelectorAll(`[data-student="${studentId}"]`).forEach(b => {
+            b.classList.remove('selected', 'present', 'absent');
+          });
+          btn.classList.add('selected', status);
+        });
+      });
+    }
+
+    document.getElementById('saveAttendanceBtn').addEventListener('click', async () => {
+      const date = document.getElementById('attendanceDate').value;
+      const records = Object.entries(studentStatuses).map(([studentId, status]) => ({ studentId, status }));
+      await apiPost('/attendance/mark', { classId: selectedClassId, date, records });
+      const successBox = document.getElementById('attendanceSuccess');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+    });
+
+    function openAssignment(classId, subjectId) {
+      selectedClassId = classId;
+      selectedSubjectId = subjectId;
+      document.getElementById('assignmentPanel').classList.add('visible');
+      document.getElementById('attendancePanel').classList.remove('visible');
+    }
+
+    document.getElementById('postAssignmentBtn').addEventListener('click', async () => {
+      const title = document.getElementById('assignTitle').value.trim();
+      const description = document.getElementById('assignDesc').value.trim();
+      const dueDate = document.getElementById('assignDue').value;
+      if (!title || !description || !dueDate) return;
+
+      await apiPost('/assignments', {
+        title, description, dueDate,
+        classId: selectedClassId, subjectId: selectedSubjectId,
+      });
+
+      document.getElementById('assignTitle').value = '';
+      document.getElementById('assignDesc').value = '';
+      document.getElementById('assignDue').value = '';
+      const successBox = document.getElementById('assignmentSuccess');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+    });
+
+    (async function init() {
+      await loadProfile();
+      loadSchedule();
+      loadClasses();
+    })();
+  </script>
+</body>
+</html>
