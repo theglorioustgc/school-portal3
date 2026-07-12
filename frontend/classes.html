@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Classes & Subjects — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .card h2 { font-size: 1.05rem; margin-bottom: 1rem; }
+    .add-row {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+    }
+    .add-row input { flex: 1; }
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.92rem;
+    }
+    .list-item:last-child { border-bottom: none; }
+    .delete-btn {
+      background: none;
+      border: none;
+      color: var(--error);
+      font-size: 0.78rem;
+      cursor: pointer;
+      padding: 0.2rem 0.5rem;
+    }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+
+    .assign-section {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+    }
+    .assign-row {
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .assign-row .field { margin-bottom: 0; min-width: 180px; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html" class="active">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Classes &amp; Subjects</h1>
+
+      <div class="layout">
+        <div class="card">
+          <h2>Classes</h2>
+          <div class="add-row">
+            <input type="text" id="newClassName" placeholder="e.g. JSS3" />
+            <button class="btn-primary" id="addClassBtn">Add</button>
+          </div>
+          <div id="classList"><p class="empty-state">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <h2>Subjects</h2>
+          <div class="add-row">
+            <input type="text" id="newSubjectName" placeholder="e.g. Physics" />
+            <button class="btn-primary" id="addSubjectBtn">Add</button>
+          </div>
+          <div id="subjectList"><p class="empty-state">Loading…</p></div>
+        </div>
+      </div>
+
+      <div class="card assign-section">
+        <h2>Assign a teacher</h2>
+        <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">
+          Links a teacher to a class + subject — required before they can mark attendance, grade, or post assignments for it.
+        </p>
+        <div class="assign-row">
+          <div class="field">
+            <label for="assignTeacher">Teacher</label>
+            <select id="assignTeacher"></select>
+          </div>
+          <div class="field">
+            <label for="assignClass">Class</label>
+            <select id="assignClass"></select>
+          </div>
+          <div class="field">
+            <label for="assignSubject">Subject</label>
+            <select id="assignSubject"></select>
+          </div>
+          <button class="btn-secondary" id="assignBtn">Assign</button>
+        </div>
+        <div class="success-message" id="assignSuccess" style="margin-top: 1rem;">Assignment created.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    async function apiDelete(path) {
+      await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    async function loadClasses() {
+      const classes = await apiGet('/classes');
+      const container = document.getElementById('classList');
+      container.innerHTML = classes.length === 0
+        ? '<p class="empty-state">No classes yet.</p>'
+        : classes.map(c => `
+            <div class="list-item">
+              <span>${c.name}</span>
+              <button class="delete-btn" data-id="${c.id}" data-type="class">Remove</button>
+            </div>
+          `).join('');
+      return classes;
+    }
+
+    async function loadSubjects() {
+      const subjects = await apiGet('/subjects');
+      const container = document.getElementById('subjectList');
+      container.innerHTML = subjects.length === 0
+        ? '<p class="empty-state">No subjects yet.</p>'
+        : subjects.map(s => `
+            <div class="list-item">
+              <span>${s.name}</span>
+              <button class="delete-btn" data-id="${s.id}" data-type="subject">Remove</button>
+            </div>
+          `).join('');
+      return subjects;
+    }
+
+    async function loadTeachers() {
+      const teachers = await apiGet('/teachers');
+      document.getElementById('assignTeacher').innerHTML = teachers.map(t => `<option value="${t.id}">${t.firstName} ${t.lastName} (${t.teacherId})</option>`).join('');
+    }
+
+    async function refreshAll() {
+      const classes = await loadClasses();
+      const subjects = await loadSubjects();
+      document.getElementById('assignClass').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('assignSubject').innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      attachDeleteHandlers();
+    }
+
+    function attachDeleteHandlers() {
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const type = btn.dataset.type;
+          const id = btn.dataset.id;
+          await apiDelete(type === 'class' ? `/classes/${id}` : `/subjects/${id}`);
+          refreshAll();
+        });
+      });
+    }
+
+    document.getElementById('addClassBtn').addEventListener('click', async () => {
+      const name = document.getElementById('newClassName').value.trim();
+      if (!name) return;
+      const result = await apiPost('/classes', { name });
+      if (result.ok) {
+        document.getElementById('newClassName').value = '';
+        refreshAll();
+      } else {
+        alert(result.data.error || 'Could not add class');
+      }
+    });
+
+    document.getElementById('addSubjectBtn').addEventListener('click', async () => {
+      const name = document.getElementById('newSubjectName').value.trim();
+      if (!name) return;
+      const result = await apiPost('/subjects', { name });
+      if (result.ok) {
+        document.getElementById('newSubjectName').value = '';
+        refreshAll();
+      } else {
+        alert(result.data.error || 'Could not add subject');
+      }
+    });
+
+    document.getElementById('assignBtn').addEventListener('click', async () => {
+      const teacherId = document.getElementById('assignTeacher').value;
+      const classId = document.getElementById('assignClass').value;
+      const subjectId = document.getElementById('assignSubject').value;
+      const result = await apiPost('/teacher-assignments', { teacherId, classId, subjectId });
+      const successBox = document.getElementById('assignSuccess');
+      if (result.ok) {
+        successBox.textContent = 'Assignment created.';
+        successBox.classList.add('visible');
+      } else {
+        successBox.textContent = result.data.error || 'Could not create assignment.';
+        successBox.style.color = 'var(--error)';
+        successBox.classList.add('visible');
+      }
+      setTimeout(() => successBox.classList.remove('visible'), 3000);
+    });
+
+    (async function init() {
+      await refreshAll();
+      await loadTeachers();
+    })();
+  </script>
+</body>
+</html>
