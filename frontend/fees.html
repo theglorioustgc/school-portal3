@@ -88,11 +88,18 @@
           </tbody>
         </table>
 
-        <div class="new-feetype-row">
-          <input type="text" id="newFeeName" placeholder="New fee type name (e.g. Tuition Term 3)" />
-          <input type="number" id="newFeeAmount" placeholder="Amount (optional)" style="width: 160px;" />
-          <button class="btn-secondary" id="createFeeTypeBtn">+ Create fee type</button>
-        </div>
+       <div class="new-feetype-row" style="flex-direction: column; align-items: flex-start;">
+     <div style="display:flex; gap:0.6rem; width:100%;">
+       <input type="text" id="newFeeName" placeholder="New fee type name (e.g. Tuition Term 3)" style="flex:1;" />
+       <input type="number" id="newFeeAmount" placeholder="Amount (optional)" style="width: 160px;" />
+     </div>
+     <div style="margin-top: 0.8rem;">
+       <div class="eyebrow" style="margin-bottom: 0.4rem;">Applies to</div>
+       <div id="newFeeClassCheckboxes" style="display:flex; gap:1rem; flex-wrap:wrap;"></div>
+       <p class="text-slate" style="font-size: 0.78rem; margin-top: 0.4rem;">Leave all unchecked to apply this fee to every class.</p>
+     </div>
+     <button class="btn-secondary" id="createFeeTypeBtn" style="margin-top: 0.8rem;">+ Create fee type</button>
+   </div>
       </div>
     </div>
   </div>
