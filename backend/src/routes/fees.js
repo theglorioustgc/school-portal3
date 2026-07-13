@@ -15,19 +15,42 @@ const router = express.Router();
 // FEE TYPES
 // ------------------------------------------------------------------
 
-router.get('/fee-types', requireAuth, requireRole('admin', 'bursar'), async (req, res) => {
-  const feeTypes = await prisma.feeType.findMany({ orderBy: { createdAt: 'desc' } });
-  res.json(feeTypes);
-});
+// classId query param optional — if given, returns fee types that
+   // either apply to every class (no links) OR are specifically linked
+   // to that class.
+   router.get('/fee-types', requireAuth, requireRole('admin', 'bursar'), async (req, res) => {
+     const { classId } = req.query;
 
-router.post('/fee-types', requireAuth, requireRole('admin'), async (req, res) => {
-  const { name, amount, term } = req.body;
-  if (!name) return res.status(400).json({ error: 'name is required' });
+     const feeTypes = await prisma.feeType.findMany({
+       where: classId
+         ? { OR: [{ classes: { none: {} } }, { classes: { some: { classId } } }] }
+         : {},
+       include: { classes: { include: { class: true } } },
+       orderBy: { createdAt: 'desc' },
+     });
+     res.json(feeTypes);
+   });
 
-  const feeType = await prisma.feeType.create({ data: { name, amount, term } });
-  res.status(201).json(feeType);
-});
+   // Body: { name, amount, term, classIds? }
+   // classIds omitted or empty -> applies to every class
+   router.post('/fee-types', requireAuth, requireRole('admin'), async (req, res) => {
+     const { name, amount, term, classIds } = req.body;
+     if (!name) return res.status(400).json({ error: 'name is required' });
 
+     const feeType = await prisma.feeType.create({ data: { name, amount, term } });
+
+     if (Array.isArray(classIds) && classIds.length > 0) {
+       await prisma.feeTypeClass.createMany({
+         data: classIds.map((classId) => ({ feeTypeId: feeType.id, classId })),
+       });
+     }
+
+     const result = await prisma.feeType.findUnique({
+       where: { id: feeType.id },
+       include: { classes: { include: { class: true } } },
+     });
+     res.status(201).json(result);
+   });
 // ------------------------------------------------------------------
 // GET /fees/class/:classId?feeTypeId=xxx
 // -> every student in a class, with their paid/pending status for one fee type
