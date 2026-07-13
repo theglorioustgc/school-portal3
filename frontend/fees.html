@@ -136,11 +136,15 @@
      `).join('');
    }
 
-    async function loadClasses() {
-      const classes = await apiGet('/classes');
-      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-    }
+   async function loadClasses() {
+  const classes = await apiGet('/classes');
+  document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
 
+document.getElementById('classSelect').addEventListener('change', () => {
+  const classId = document.getElementById('classSelect').value;
+  loadFeeTypes(classId);
+});
     async function loadFeeStatus() {
       const feeTypeId = document.getElementById('feeTypeSelect').value;
       const classId = document.getElementById('classSelect').value;
@@ -189,26 +193,30 @@
     document.getElementById('loadBtn').addEventListener('click', loadFeeStatus);
 
     document.getElementById('createFeeTypeBtn').addEventListener('click', async () => {
-      const name = document.getElementById('newFeeName').value.trim();
-      const amount = document.getElementById('newFeeAmount').value;
-      if (!name) return;
+     const name = document.getElementById('newFeeName').value.trim();
+     const amount = document.getElementById('newFeeAmount').value;
+     if (!name) return;
 
-      await fetch(`${API_BASE_URL}/fee-types`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name, amount: amount ? parseFloat(amount) : null }),
-      });
+     const classIds = Array.from(document.querySelectorAll('.fee-class-checkbox:checked')).map(cb => cb.value);
 
-      document.getElementById('newFeeName').value = '';
-      document.getElementById('newFeeAmount').value = '';
-      await loadFeeTypes();
-    });
+     await fetch(`${API_BASE_URL}/fee-types`, {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+       body: JSON.stringify({ name, amount: amount ? parseFloat(amount) : null, classIds }),
+     });
 
-    (async function init() {
-      await loadFeeTypes();
-      await loadClasses();
-      await loadFeeStatus();
-    })();
+     document.getElementById('newFeeName').value = '';
+     document.getElementById('newFeeAmount').value = '';
+     document.querySelectorAll('.fee-class-checkbox').forEach(cb => cb.checked = false);
+     await loadFeeTypes(document.getElementById('classSelect').value);
+   });
+
+   (async function init() {
+     await loadClasses();
+     await loadClassCheckboxes();
+     await loadFeeTypes(document.getElementById('classSelect').value);
+     await loadFeeStatus();
+   })();
   </script>
 </body>
 </html>
