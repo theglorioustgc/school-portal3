@@ -122,10 +122,19 @@
       return res.json();
     }
 
-    async function loadFeeTypes() {
-      const feeTypes = await apiGet('/fee-types');
-      document.getElementById('feeTypeSelect').innerHTML = feeTypes.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
-    }
+    async function loadFeeTypes(classId) {
+     const feeTypes = await apiGet(`/fee-types${classId ? `?classId=${classId}` : ''}`);
+     document.getElementById('feeTypeSelect').innerHTML = feeTypes.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+   }
+
+   async function loadClassCheckboxes() {
+     const classes = await apiGet('/classes');
+     document.getElementById('newFeeClassCheckboxes').innerHTML = classes.map(c => `
+       <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.85rem;">
+         <input type="checkbox" value="${c.id}" class="fee-class-checkbox" /> ${c.name}
+       </label>
+     `).join('');
+   }
 
     async function loadClasses() {
       const classes = await apiGet('/classes');
