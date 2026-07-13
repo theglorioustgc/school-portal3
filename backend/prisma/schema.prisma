@@ -24,11 +24,10 @@ model SchoolConfig {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Early-warning thresholds — configurable per school, not hardcoded
-  attendanceAbsenceThreshold   Int   @default(3)    // absences in the rolling window
-  attendanceRateThreshold      Float @default(0.85) // below this rate also triggers
-  performanceDeclineThreshold  Float @default(10)   // point drop vs previous term
-  performanceLowThreshold      Float @default(40)   // absolute average below this
+  attendanceAbsenceThreshold   Int   @default(3)
+  attendanceRateThreshold      Float @default(0.85)
+  performanceDeclineThreshold  Float @default(10)
+  performanceLowThreshold      Float @default(40)
 }
 
 model IdCounter {
@@ -129,6 +128,7 @@ model SchoolClass {
   classAssignments Assignment[]
   answerKeys  ExamAnswerKey[]
   examScripts ExamScript[]
+  feeTypeLinks FeeTypeClass[]
 }
 
 model Subject {
@@ -283,6 +283,7 @@ model FeeType {
   createdAt   DateTime @default(now())
 
   payments    StudentFeePayment[]
+  classes     FeeTypeClass[]
 }
 
 model StudentFeePayment {
@@ -381,16 +382,26 @@ model ContentPost {
   updatedAt     DateTime @updatedAt
 }
 
-// ----------------------------------------------------------
-// FLAGS — early-warning system. Written by a triggered check
-// (not recalculated live on every page load). Two types:
-// "attendance" and "performance" — details in the message field.
-// ----------------------------------------------------------
 model Flag {
   id          String   @id @default(uuid())
   studentId   String
   student     Student  @relation(fields: [studentId], references: [id])
-  flagType    String   // "attendance" | "performance_declining" | "performance_low"
+  flagType    String
   message     String
   createdAt   DateTime @default(now())
+}
+
+// ----------------------------------------------------------
+// FEE TYPE <-> CLASS LINK — a fee type with NO rows here
+// applies to every class (unrestricted). Linking it to one or
+// more classes restricts it to only those classes.
+// ----------------------------------------------------------
+model FeeTypeClass {
+  id          String   @id @default(uuid())
+  feeTypeId   String
+  feeType     FeeType  @relation(fields: [feeTypeId], references: [id])
+  classId     String
+  class       SchoolClass @relation(fields: [classId], references: [id])
+
+  @@unique([feeTypeId, classId])
 }
