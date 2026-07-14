@@ -8,6 +8,7 @@
 const express = require('express');
 const prisma = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { sendAlert } = require('../utils/notify');
 
 const router = express.Router();
 
@@ -89,34 +90,47 @@ router.get('/fees/class/:classId', requireAuth, requireRole('admin', 'bursar'), 
 // Body: { studentId, feeTypeId, status: "paid" | "pending" }
 // ------------------------------------------------------------------
 router.post('/fees/mark', requireAuth, requireRole('admin', 'bursar'), async (req, res) => {
-  const { studentId, feeTypeId, status } = req.body;
+     const { studentId, feeTypeId, status } = req.body;
 
-  if (!studentId || !feeTypeId || !['paid', 'pending'].includes(status)) {
-    return res.status(400).json({ error: 'studentId, feeTypeId, and a valid status (paid/pending) are required' });
-  }
+     if (!studentId || !feeTypeId || !['paid', 'pending'].includes(status)) {
+       return res.status(400).json({ error: 'studentId, feeTypeId, and a valid status (paid/pending) are required' });
+     }
 
-  const markedPaidByAdminId = req.user.role === 'admin' ? req.user.id : null;
-  const markedPaidByBursarId = req.user.role === 'bursar' ? req.user.id : null;
+     const markedPaidByAdminId = req.user.role === 'admin' ? req.user.id : null;
+     const markedPaidByBursarId = req.user.role === 'bursar' ? req.user.id : null;
 
-  const record = await prisma.studentFeePayment.upsert({
-    where: { studentId_feeTypeId: { studentId, feeTypeId } },
-    update: {
-      status,
-      markedPaidByAdminId: status === 'paid' ? markedPaidByAdminId : null,
-      markedPaidByBursarId: status === 'paid' ? markedPaidByBursarId : null,
-      markedPaidAt: status === 'paid' ? new Date() : null,
-    },
-    create: {
-      studentId,
-      feeTypeId,
-      status,
-      markedPaidByAdminId: status === 'paid' ? markedPaidByAdminId : null,
-      markedPaidByBursarId: status === 'paid' ? markedPaidByBursarId : null,
-      markedPaidAt: status === 'paid' ? new Date() : null,
-    },
-  });
+     const record = await prisma.studentFeePayment.upsert({
+       where: { studentId_feeTypeId: { studentId, feeTypeId } },
+       update: {
+         status,
+         markedPaidByAdminId: status === 'paid' ? markedPaidByAdminId : null,
+         markedPaidByBursarId: status === 'paid' ? markedPaidByBursarId : null,
+         markedPaidAt: status === 'paid' ? new Date() : null,
+       },
+       create: {
+         studentId,
+         feeTypeId,
+         status,
+         markedPaidByAdminId: status === 'paid' ? markedPaidByAdminId : null,
+         markedPaidByBursarId: status === 'paid' ? markedPaidByBursarId : null,
+         markedPaidAt: status === 'paid' ? new Date() : null,
+       },
+     });
 
-  res.json(record);
-});
+     if (status === 'paid') {
+       const student = await prisma.student.findUnique({ where: { id: studentId } });
+       const feeType = await prisma.feeType.findUnique({ where: { id: feeTypeId } });
+       if (student?.parentEmail) {
+         await sendAlert({
+           recipient: student.parentEmail,
+           channel: 'email',
+           message: `Payment confirmed: "${feeType?.name || 'a fee'}" has been marked as paid for ${student.firstName}.`,
+           triggerType: 'fee_status',
+         });
+       }
+     }
+
+     res.json(record);
+   });
 
 module.exports = router;
