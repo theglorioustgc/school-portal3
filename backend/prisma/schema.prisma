@@ -28,6 +28,13 @@ model SchoolConfig {
   attendanceRateThreshold      Float @default(0.85)
   performanceDeclineThreshold  Float @default(10)
   performanceLowThreshold      Float @default(40)
+
+  // Marking scheme — informational max scores per component.
+  // Not enforced strictly, just shown/used as a guide on the report card.
+  ca1Max        Float @default(10)
+  ca2Max        Float @default(10)
+  ca3Max        Float @default(10)
+  examMax       Float @default(70)
 }
 
 model IdCounter {
@@ -391,11 +398,6 @@ model Flag {
   createdAt   DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// FEE TYPE <-> CLASS LINK — a fee type with NO rows here
-// applies to every class (unrestricted). Linking it to one or
-// more classes restricts it to only those classes.
-// ----------------------------------------------------------
 model FeeTypeClass {
   id          String   @id @default(uuid())
   feeTypeId   String
@@ -404,4 +406,19 @@ model FeeTypeClass {
   class       SchoolClass @relation(fields: [classId], references: [id])
 
   @@unique([feeTypeId, classId])
+}
+
+// ----------------------------------------------------------
+// GRADE BOUNDARIES — the marking scheme. Fully configurable
+// by the school, not hardcoded. Looked up live whenever a
+// report card is generated (grades aren't stored redundantly
+// since the scheme rarely changes mid-term).
+// ----------------------------------------------------------
+model GradeBoundary {
+  id          String   @id @default(uuid())
+  grade       String   // e.g. "A1", "B2", "F9"
+  minScore    Float
+  maxScore    Float
+  remark      String   // e.g. "Excellent", "Fail"
+  createdAt   DateTime @default(now())
 }
