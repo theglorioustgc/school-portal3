@@ -61,52 +61,74 @@ router.post('/exams/answer-key', requireAuth, requireRole('admin', 'teacher'), a
 // MARK A SCRIPT — one student, auto-scores objective, saves as draft
 // ------------------------------------------------------------------
 router.post('/exams/mark', requireAuth, requireRole('admin', 'teacher'), async (req, res) => {
-  const { studentId, classId, subjectId, term, objectiveAnswers, theoryScore } = req.body;
+     const { studentId, classId, subjectId, term, objectiveAnswers, theoryScore } = req.body;
 
-  if (!studentId || !classId || !subjectId || !term || !Array.isArray(objectiveAnswers)) {
-    return res.status(400).json({ error: 'studentId, classId, subjectId, term, and objectiveAnswers array are required' });
-  }
+     if (!studentId || !classId || !subjectId || !term || !Array.isArray(objectiveAnswers)) {
+       return res.status(400).json({ error: 'studentId, classId, subjectId, term, and objectiveAnswers array are required' });
+     }
 
-  const allowed = await canActOnSubject(req.user, classId, subjectId);
-  if (!allowed) {
-    return res.status(403).json({ error: 'You are not assigned to teach this subject for this class' });
-  }
+     const allowed = await canActOnSubject(req.user, classId, subjectId);
+     if (!allowed) {
+       return res.status(403).json({ error: 'You are not assigned to teach this subject for this class' });
+     }
 
-  const existing = await prisma.examScript.findUnique({
-    where: { studentId_subjectId_term: { studentId, subjectId, term } },
-  });
-  if (existing && existing.status === 'submitted') {
-    return res.status(409).json({ error: 'This script is already submitted and locked. Ask an admin to reopen it.' });
-  }
+     const existing = await prisma.examScript.findUnique({
+       where: { studentId_subjectId_term: { studentId, subjectId, term } },
+     });
+     if (existing && existing.status === 'submitted') {
+       return res.status(409).json({ error: 'This script is already submitted and locked. Ask an admin to reopen it.' });
+     }
 
-  const key = await prisma.examAnswerKey.findUnique({
-    where: { classId_subjectId_term: { classId, subjectId, term } },
-  });
-  if (!key) {
-    return res.status(400).json({ error: 'No answer key exists yet for this class/subject/term. Set that up first.' });
-  }
+     const key = await prisma.examAnswerKey.findUnique({
+       where: { classId_subjectId_term: { classId, subjectId, term } },
+     });
+     if (!key) {
+       return res.status(400).json({ error: 'No answer key exists yet for this class/subject/term. Set that up first.' });
+     }
 
-  const correctAnswers = JSON.parse(key.answers);
-  const objectiveScore = scoreObjective(objectiveAnswers, correctAnswers);
-  const theory = theoryScore || 0;
-  const totalScore = objectiveScore + theory;
-  const enteredById = req.user.role === 'teacher' ? req.user.id : null;
+     const correctAnswers = JSON.parse(key.answers);
+     const objectiveScore = scoreObjective(objectiveAnswers, correctAnswers);
+     const theory = theoryScore || 0;
+     const totalScore = objectiveScore + theory;
+     const enteredById = req.user.role === 'teacher' ? req.user.id : null;
 
-  const script = await prisma.examScript.upsert({
-    where: { studentId_subjectId_term: { studentId, subjectId, term } },
-    update: {
-      objectiveAnswers: JSON.stringify(objectiveAnswers),
-      objectiveScore, theoryScore: theory, totalScore, classId, enteredById, status: 'draft',
-    },
-    create: {
-      studentId, classId, subjectId, term,
-      objectiveAnswers: JSON.stringify(objectiveAnswers),
-      objectiveScore, theoryScore: theory, totalScore, enteredById, status: 'draft',
-    },
-  });
+     const script = await prisma.examScript.upsert({
+       where: { studentId_subjectId_term: { studentId, subjectId, term } },
+       update: {
+         objectiveAnswers: JSON.stringify(objectiveAnswers),
+         objectiveScore, theoryScore: theory, totalScore, classId, enteredById, status: 'draft',
+       },
+       create: {
+         studentId, classId, subjectId, term,
+         objectiveAnswers: JSON.stringify(objectiveAnswers),
+         objectiveScore, theoryScore: theory, totalScore, enteredById, status: 'draft',
+       },
+     });
 
-  res.status(201).json(script);
-});
+     // Push this exam score straight into the gradebook's "exam" field —
+     // this is what makes a marked script flow directly into the report
+     // card, without the teacher re-typing the score a second time.
+     // If that subject's gradebook record is already submitted/locked,
+     // we leave it alone rather than silently overwriting locked data.
+     const existingGradeRecord = await prisma.gradeRecord.findUnique({
+       where: { studentId_subjectId_term: { studentId, subjectId, term } },
+     });
+
+     if (!existingGradeRecord || existingGradeRecord.status === 'draft') {
+       const ca1 = existingGradeRecord?.ca1 ?? null;
+       const ca2 = existingGradeRecord?.ca2 ?? null;
+       const ca3 = existingGradeRecord?.ca3 ?? null;
+       const total = [ca1, ca2, ca3, totalScore].filter((v) => v !== null && v !== undefined).reduce((sum, v) => sum + v, 0);
+
+       await prisma.gradeRecord.upsert({
+         where: { studentId_subjectId_term: { studentId, subjectId, term } },
+         update: { exam: totalScore, total, classId, enteredById },
+         create: { studentId, classId, subjectId, term, ca1, ca2, ca3, exam: totalScore, total, enteredById },
+       });
+     }
+
+     res.status(201).json(script);
+   });
 
 // ------------------------------------------------------------------
 // SUBMIT — locks every draft script for a class+subject+term
