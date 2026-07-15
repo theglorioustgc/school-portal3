@@ -133,56 +133,35 @@ router.post('/exams/mark', requireAuth, requireRole('admin', 'teacher'), async (
 // ------------------------------------------------------------------
 // SUBMIT — locks every draft script for a class+subject+term
 // ------------------------------------------------------------------
-router.post('/exams/submit', requireAuth, requireRole('admin', 'teacher'), async (req, res) => {
-  const { classId, subjectId, term } = req.body;
-  if (!classId || !subjectId || !term) {
-    return res.status(400).json({ error: 'classId, subjectId, and term are required' });
-  }
-
-  const allowed = await canActOnSubject(req.user, classId, subjectId);
-  if (!allowed) {
-    return res.status(403).json({ error: 'You are not assigned to teach this subject for this class' });
-  }
-
-  const result = await prisma.examScript.updateMany({
-    where: { classId, subjectId, term, status: 'draft' },
-    data: { status: 'submitted' },
-  });
-
-  res.json({ success: true, submittedCount: result.count });
-});
-
-// ------------------------------------------------------------------
-// COMPILE A WHOLE CLASS — totals, average, class rank per student.
-// Partial-safe: only counts submitted scripts; tracks how many
-// subjects are still missing per student.
-// ------------------------------------------------------------------
 router.post('/exams/compile-class', requireAuth, requireRole('admin'), async (req, res) => {
-  const { classId, term } = req.body;
-  if (!classId || !term) {
-    return res.status(400).json({ error: 'classId and term are required' });
-  }
+     const { classId, term } = req.body;
+     if (!classId || !term) {
+       return res.status(400).json({ error: 'classId and term are required' });
+     }
 
-  const subjectsForClass = await prisma.teacherAssignment.findMany({
-    where: { classId },
-    select: { subjectId: true },
-    distinct: ['subjectId'],
-  });
-  const subjectsExpected = subjectsForClass.length;
+     const subjectsForClass = await prisma.teacherAssignment.findMany({
+       where: { classId },
+       select: { subjectId: true },
+       distinct: ['subjectId'],
+     });
+     const subjectsExpected = subjectsForClass.length;
 
-  const students = await prisma.student.findMany({ where: { classId, status: 'active' } });
+     const students = await prisma.student.findMany({ where: { classId, status: 'active' } });
 
-  const results = [];
-  for (const student of students) {
-    const scripts = await prisma.examScript.findMany({
-      where: { studentId: student.id, classId, term, status: 'submitted' },
-    });
-    const subjectsSubmitted = scripts.length;
-    const totalScore = scripts.reduce((sum, s) => sum + (s.totalScore || 0), 0);
-    const average = subjectsSubmitted > 0 ? totalScore / subjectsSubmitted : null;
+     const results = [];
+     for (const student of students) {
+       // Report card now compiles from the gradebook (GradeRecord) —
+       // the single place every subject's score ends up, whether typed
+       // in directly or pushed there by the exam-marking tool.
+       const records = await prisma.gradeRecord.findMany({
+         where: { studentId: student.id, classId, term, status: 'submitted' },
+       });
+       const subjectsSubmitted = records.length;
+       const totalScore = records.reduce((sum, r) => sum + (r.total || 0), 0);
+       const average = subjectsSubmitted > 0 ? totalScore / subjectsSubmitted : null;
 
-    results.push({ studentId: student.id, totalScore, average, subjectsExpected, subjectsSubmitted });
-  }
+       results.push({ studentId: student.id, totalScore, average, subjectsExpected, subjectsSubmitted });
+     }
 
   // Rank by totalScore descending (dense rank — ties share a position)
   const sorted = [...results].sort((a, b) => b.totalScore - a.totalScore);
