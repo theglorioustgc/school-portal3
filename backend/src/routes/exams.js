@@ -8,9 +8,10 @@
 // Nothing is visible to a student until "published" is set.
 
 const express = require('express');
-const prisma = require('../db');
-const { requireAuth, requireRole } = require('../middleware/auth');
-const { sendAlert } = require('../utils/notify');
+   const prisma = require('../db');
+   const { requireAuth, requireRole } = require('../middleware/auth');
+   const { sendAlert } = require('../utils/notify');
+   const { lookupGrade } = require('../utils/gradeLookup');
 
 const router = express.Router();
 
@@ -248,4 +249,79 @@ router.get('/exams/results', requireAuth, async (req, res) => {
   res.json(result);
 });
 
+// ------------------------------------------------------------------
+   // GET /exams/report-card?studentId=xxx&term=xxx
+   // Full printable report card: school info, student info, every
+   // submitted subject with CA1/CA2/CA3/Exam/Total/Grade/Remark,
+   // overall total/average/position. Same publish-gate as before —
+   // students can't see it until the principal has published it.
+   // ------------------------------------------------------------------
+   router.get('/exams/report-card', requireAuth, async (req, res) => {
+     const { studentId, term } = req.query;
+     if (!studentId || !term) {
+       return res.status(400).json({ error: 'studentId and term query params are required' });
+     }
+
+     if (req.user.role === 'student' && req.user.id !== studentId) {
+       return res.status(403).json({ error: 'You can only view your own report card' });
+     }
+
+     const publication = await prisma.resultPublication.findUnique({
+       where: { studentId_term: { studentId, term } },
+     });
+
+     if (!publication) {
+       return res.status(404).json({ error: 'No compiled result found for this student/term yet' });
+     }
+
+     if (req.user.role === 'student' && publication.status !== 'published') {
+       return res.status(403).json({ error: 'This report card has not been published yet' });
+     }
+
+     const student = await prisma.student.findUnique({ where: { id: studentId }, include: { class: true } });
+     const school = await prisma.schoolConfig.findFirst();
+
+     const records = await prisma.gradeRecord.findMany({
+       where: { studentId, term, status: 'submitted' },
+       include: { subject: true },
+       orderBy: { subject: { name: 'asc' } },
+     });
+
+     const subjects = [];
+     for (const r of records) {
+       const { grade, remark } = await lookupGrade(r.total);
+       subjects.push({
+         subject: r.subject.name,
+         ca1: r.ca1, ca2: r.ca2, ca3: r.ca3, exam: r.exam, total: r.total,
+         grade, remark,
+       });
+     }
+
+     const { grade: overallGrade, remark: overallRemark } = await lookupGrade(publication.average);
+
+     res.json({
+       school: school ? {
+         schoolName: school.schoolName,
+         logoUrl: school.logoUrl,
+         contactEmail: school.contactEmail,
+         contactPhone: school.contactPhone,
+       } : null,
+       student: {
+         studentId: student.studentId,
+         firstName: student.firstName,
+         lastName: student.lastName,
+         className: student.class?.name || null,
+       },
+       term,
+       subjects,
+       totalScore: publication.totalScore,
+       average: publication.average,
+       position: publication.position,
+       subjectsExpected: publication.subjectsExpected,
+       subjectsSubmitted: publication.subjectsSubmitted,
+       overallGrade,
+       overallRemark,
+       publishedAt: publication.publishedAt,
+     });
+   });
 module.exports = router;
