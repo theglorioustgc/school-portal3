@@ -324,4 +324,20 @@ router.get('/exams/results', requireAuth, async (req, res) => {
        publishedAt: publication.publishedAt,
      });
    });
+
+// ------------------------------------------------------------------
+   // REOPEN — admin-only, unlocks a submitted exam script
+   // ------------------------------------------------------------------
+   router.post('/exams/reopen', requireAuth, requireRole('admin'), async (req, res) => {
+     const { studentId, subjectId, term } = req.body;
+     if (!studentId || !subjectId || !term) {
+       return res.status(400).json({ error: 'studentId, subjectId, and term are required' });
+     }
+
+     const script = await prisma.examScript.update({
+       where: { studentId_subjectId_term: { studentId, subjectId, term } },
+       data: { status: 'draft' },
+     });
+     res.json(script);
+   });
 module.exports = router;
