@@ -18,7 +18,8 @@ const eventsRoutes = require('./routes/events');
 const feesRoutes = require('./routes/fees');
 const examsRoutes = require('./routes/exams');
 const adminRoutes = require('./routes/admin');
-const flagsRoutes = require('./routes/flags');
+   const flagsRoutes = require('./routes/flags');
+   const gradingSchemeRoutes = require('./routes/gradingScheme');
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/', feesRoutes);
 app.use('/', examsRoutes);
 app.use('/', adminRoutes);
 app.use('/', flagsRoutes);
+app.use('/', gradingSchemeRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
