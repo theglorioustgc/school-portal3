@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grading Scheme — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .add-row { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+    .add-row input { padding: 0.6rem 0.7rem; border: 1.5px solid var(--line); border-radius: 8px; font-family: var(--font-body); font-size: 0.85rem; }
+    .add-row .grade-input { width: 70px; }
+    .add-row .score-input { width: 70px; }
+    .add-row .remark-input { flex: 1; min-width: 140px; }
+    .list-item { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+    .list-item:last-child { border-bottom: none; }
+    .delete-btn { background: none; border: none; color: var(--error); font-size: 0.78rem; cursor: pointer; }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+    .max-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html" class="active">Grading Scheme</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Grading scheme</h1>
+
+      <div class="layout">
+        <div class="card">
+          <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Grade boundaries</h2>
+          <div class="add-row">
+            <input type="text" id="newGrade" class="grade-input" placeholder="A1" />
+            <input type="number" id="newMin" class="score-input" placeholder="Min" />
+            <input type="number" id="newMax" class="score-input" placeholder="Max" />
+            <input type="text" id="newRemark" class="remark-input" placeholder="Remark (e.g. Excellent)" />
+            <button class="btn-secondary" id="addBoundaryBtn">Add</button>
+          </div>
+          <div id="boundaryList"><p class="empty-state">Loading…</p></div>
+        </div>
+
+        <div class="card">
+          <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Component max scores</h2>
+          <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">Informational only — shown as column headers in the gradebook.</p>
+          <div class="max-grid">
+            <div class="field">
+              <label for="ca1Max">CA1 max</label>
+              <input type="number" id="ca1Max" />
+            </div>
+            <div class="field">
+              <label for="ca2Max">CA2 max</label>
+              <input type="number" id="ca2Max" />
+            </div>
+            <div class="field">
+              <label for="ca3Max">CA3 max</label>
+              <input type="number" id="ca3Max" />
+            </div>
+            <div class="field">
+              <label for="examMax">Exam max</label>
+              <input type="number" id="examMax" />
+            </div>
+          </div>
+          <button class="btn-primary" id="saveMaxBtn">Save</button>
+          <div class="success-message" id="maxSuccess" style="margin-top: 0.8rem;">Saved.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    async function apiPut(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    async function apiDelete(path) {
+      await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    async function loadBoundaries() {
+      const boundaries = await apiGet('/grading-scheme');
+      const container = document.getElementById('boundaryList');
+      if (boundaries.length === 0) {
+        container.innerHTML = '<p class="empty-state">No grade boundaries yet.</p>';
+        return;
+      }
+      container.innerHTML = boundaries.map(b => `
+        <div class="list-item">
+          <span><strong>${b.grade}</strong> · ${b.minScore}–${b.maxScore} · ${b.remark}</span>
+          <button class="delete-btn" data-id="${b.id}">Remove</button>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await apiDelete(`/grading-scheme/${btn.dataset.id}`);
+          loadBoundaries();
+        });
+      });
+    }
+
+    document.getElementById('addBoundaryBtn').addEventListener('click', async () => {
+      const grade = document.getElementById('newGrade').value.trim();
+      const minScore = document.getElementById('newMin').value;
+      const maxScore = document.getElementById('newMax').value;
+      const remark = document.getElementById('newRemark').value.trim();
+      if (!grade || !minScore || !maxScore || !remark) return;
+
+      const result = await apiPost('/grading-scheme', { grade, minScore, maxScore, remark });
+      if (result.ok) {
+        document.getElementById('newGrade').value = '';
+        document.getElementById('newMin').value = '';
+        document.getElementById('newMax').value = '';
+        document.getElementById('newRemark').value = '';
+        loadBoundaries();
+      } else {
+        alert(result.data.error || 'Could not add.');
+      }
+    });
+
+    async function loadMaxScores() {
+      const config = await apiGet('/grading-scheme/marks-config');
+      document.getElementById('ca1Max').value = config.ca1Max;
+      document.getElementById('ca2Max').value = config.ca2Max;
+      document.getElementById('ca3Max').value = config.ca3Max;
+      document.getElementById('examMax').value = config.examMax;
+    }
+
+    document.getElementById('saveMaxBtn').addEventListener('click', async () => {
+      const ca1Max = parseFloat(document.getElementById('ca1Max').value);
+      const ca2Max = parseFloat(document.getElementById('ca2Max').value);
+      const ca3Max = parseFloat(document.getElementById('ca3Max').value);
+      const examMax = parseFloat(document.getElementById('examMax').value);
+
+      const result = await apiPut('/grading-scheme/marks-config', { ca1Max, ca2Max, ca3Max, examMax });
+      const successBox = document.getElementById('maxSuccess');
+      successBox.textContent = result.ok ? 'Saved.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+    });
+
+    (async function init() {
+      await loadBoundaries();
+      await loadMaxScores();
+    })();
+  </script>
+</body>
+</html>
