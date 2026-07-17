@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documents — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .add-row { display: flex; gap: 0.6rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .add-row input, .add-row select { padding: 0.6rem 0.7rem; border: 1.5px solid var(--line); border-radius: 8px; font-family: var(--font-body); font-size: 0.85rem; }
+    .add-row input[type="text"] { flex: 1; min-width: 180px; }
+    .doc-row { display: flex; justify-content: space-between; align-items: center; padding: 0.7rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+    .doc-row:last-child { border-bottom: none; }
+    .doc-row a { color: var(--ink); text-decoration: underline; }
+    .delete-btn { background: none; border: none; color: var(--error); font-size: 0.78rem; cursor: pointer; }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+    .filter-row { display: flex; gap: 0.6rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html">Grading Scheme</a>
+        <a href="settings.html">Settings</a>
+        <a href="flags.html">Flags</a>
+        <a href="documents.html" class="active">Documents</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Documents</h1>
+
+      <div class="card">
+        <div class="add-row">
+          <input type="text" id="newLabel" placeholder="Label (e.g. Jane Smith - Birth Certificate)" />
+          <select id="newCategory">
+            <option value="birth_certificate">Birth Certificate</option>
+            <option value="letter">Letter</option>
+            <option value="record">Record</option>
+            <option value="other">Other</option>
+          </select>
+          <input type="text" id="newFileUrl" placeholder="File link (URL)" />
+          <button class="btn-primary" id="addDocBtn">Add</button>
+        </div>
+
+        <div class="filter-row">
+          <select id="categoryFilter">
+            <option value="">All categories</option>
+            <option value="birth_certificate">Birth Certificate</option>
+            <option value="letter">Letter</option>
+            <option value="record">Record</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div id="docList"><p class="empty-state">Loading…</p></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    async function apiDelete(path) {
+      await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    async function loadDocs() {
+      const category = document.getElementById('categoryFilter').value;
+      const docs = await apiGet(`/documents${category ? `?category=${category}` : ''}`);
+      const container = document.getElementById('docList');
+      if (docs.length === 0) {
+        container.innerHTML = '<p class="empty-state">No documents yet.</p>';
+        return;
+      }
+      container.innerHTML = docs.map(d => `
+        <div class="doc-row">
+          <span><strong>${d.label}</strong> · ${d.category} — <a href="${d.fileUrl}" target="_blank" rel="noopener">View</a></span>
+          <button class="delete-btn" data-id="${d.id}">Remove</button>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await apiDelete(`/documents/${btn.dataset.id}`);
+          loadDocs();
+        });
+      });
+    }
+
+    document.getElementById('categoryFilter').addEventListener('change', loadDocs);
+
+    document.getElementById('addDocBtn').addEventListener('click', async () => {
+      const label = document.getElementById('newLabel').value.trim();
+      const category = document.getElementById('newCategory').value;
+      const fileUrl = document.getElementById('newFileUrl').value.trim();
+      if (!label || !fileUrl) return;
+
+      const result = await apiPost('/documents', { label, category, fileUrl });
+      if (result.ok) {
+        document.getElementById('newLabel').value = '';
+        document.getElementById('newFileUrl').value = '';
+        loadDocs();
+      } else {
+        alert(result.data.error || 'Could not add document.');
+      }
+    });
+
+    (async function init() {
+      await loadDocs();
+    })();
+  </script>
+</body>
+</html>
