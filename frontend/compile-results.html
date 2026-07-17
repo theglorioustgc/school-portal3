@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compile Results — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .filter-row {
+      display: flex; gap: 0.75rem; align-items: flex-end;
+      margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .filter-row .field { margin-bottom: 0; min-width: 180px; }
+    .publish-btn {
+      padding: 0.3rem 0.8rem; border-radius: 100px; border: 1.5px solid var(--line);
+      background: var(--paper-raised); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    }
+    .publish-btn.published { background: rgba(47,143,91,0.12); color: var(--success); border-color: rgba(47,143,91,0.3); }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html" class="active">Compile Results</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Compile &amp; publish results</h1>
+
+      <div class="card">
+        <div class="filter-row">
+          <div class="field">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+          <div class="field">
+            <label for="termSelect">Term</label>
+            <select id="termSelect"></select>
+          </div>
+          <button class="btn-primary" id="compileBtn">Compile class</button>
+        </div>
+
+        <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">
+          Compiling recalculates totals, averages, and class rank from every submitted gradebook record. Safe to re-run any time — it won't affect anything already published.
+        </p>
+
+        <table>
+          <thead>
+            <tr><th>Student</th><th>Total</th><th>Average</th><th>Position</th><th>Subjects</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody id="resultsBody">
+            <tr><td colspan="7" class="empty-state">Pick a class and term, then click Compile class.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    let studentsById = {};
+
+    async function loadFilters() {
+      const classes = await apiGet('/classes');
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+      const terms = await apiGet('/terms');
+      document.getElementById('termSelect').innerHTML = terms.map(t => `<option value="${t.name}" ${t.isCurrent ? 'selected' : ''}>${t.name}</option>`).join('');
+    }
+
+    function renderResults(results) {
+      const body = document.getElementById('resultsBody');
+      if (results.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">No results yet.</td></tr>';
+        return;
+      }
+      body.innerHTML = results.map(r => {
+        const student = studentsById[r.studentId];
+        const name = student ? `${student.firstName} ${student.lastName}` : r.studentId;
+        return `
+          <tr>
+            <td>${name}</td>
+            <td>${r.totalScore ?? '—'}</td>
+            <td>${r.average !== null ? r.average.toFixed(1) : '—'}</td>
+            <td>${r.position ?? '—'}</td>
+            <td>${r.subjectsSubmitted}/${r.subjectsExpected}</td>
+            <td>${r.status}</td>
+            <td>
+              <button class="publish-btn ${r.status === 'published' ? 'published' : ''}" data-student="${r.studentId}">
+                ${r.status === 'published' ? 'Published' : 'Publish'}
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.publish-btn').forEach(btn => {
+        if (btn.classList.contains('published')) return;
+        btn.addEventListener('click', async () => {
+          const term = document.getElementById('termSelect').value;
+          await apiPost('/exams/publish', { studentId: btn.dataset.student, term });
+          runCompile(false);
+        });
+      });
+    }
+
+    async function runCompile(showAlert = true) {
+      const classId = document.getElementById('classSelect').value;
+      const term = document.getElementById('termSelect').value;
+      if (!classId || !term) return;
+
+      const students = await apiGet(`/students?classId=${classId}`);
+      studentsById = {};
+      students.forEach(s => { studentsById[s.id] = s; });
+
+      const result = await apiPost('/exams/compile-class', { classId, term });
+      if (result.ok) {
+        renderResults(result.data.results);
+      } else if (showAlert) {
+        alert(result.data.error || 'Could not compile.');
+      }
+    }
+
+    document.getElementById('compileBtn').addEventListener('click', () => runCompile(true));
+
+    (async function init() {
+      await loadFilters();
+    })();
+  </script>
+</body>
+</html>
