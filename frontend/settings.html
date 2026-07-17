@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>School Settings — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .max-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .logo-preview {
+      width: 64px; height: 64px; border-radius: 10px; object-fit: cover;
+      border: 1px solid var(--line); margin-bottom: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html">Grading Scheme</a>
+        <a href="settings.html" class="active">Settings</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">School settings</h1>
+
+      <div class="layout">
+        <div class="card">
+          <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">School info</h2>
+          <img id="logoPreview" class="logo-preview" style="display:none;" />
+          <div class="field">
+            <label for="schoolCode">School code</label>
+            <input type="text" id="schoolCode" placeholder="e.g. GHS" />
+          </div>
+          <div class="field">
+            <label for="schoolName">School name</label>
+            <input type="text" id="schoolName" />
+          </div>
+          <div class="field">
+            <label for="logoUrl">Logo URL</label>
+            <input type="text" id="logoUrl" placeholder="https://…" />
+          </div>
+          <div class="field">
+            <label for="contactEmail">Contact email</label>
+            <input type="email" id="contactEmail" />
+          </div>
+          <div class="field">
+            <label for="contactPhone">Contact phone</label>
+            <input type="text" id="contactPhone" />
+          </div>
+          <button class="btn-primary" id="saveInfoBtn">Save school info</button>
+          <div class="success-message" id="infoSuccess" style="margin-top: 0.8rem;">Saved.</div>
+        </div>
+
+        <div class="card">
+          <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Early-warning thresholds</h2>
+          <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">Used by the attendance and performance flag checks.</p>
+          <div class="max-grid">
+            <div class="field">
+              <label for="attendanceAbsenceThreshold">Absences (30 days)</label>
+              <input type="number" id="attendanceAbsenceThreshold" />
+            </div>
+            <div class="field">
+              <label for="attendanceRateThreshold">Min attendance rate</label>
+              <input type="number" step="0.01" id="attendanceRateThreshold" />
+            </div>
+            <div class="field">
+              <label for="performanceDeclineThreshold">Decline threshold (pts)</label>
+              <input type="number" id="performanceDeclineThreshold" />
+            </div>
+            <div class="field">
+              <label for="performanceLowThreshold">Low average floor</label>
+              <input type="number" id="performanceLowThreshold" />
+            </div>
+          </div>
+          <button class="btn-primary" id="saveThresholdsBtn">Save thresholds</button>
+          <div class="success-message" id="thresholdSuccess" style="margin-top: 0.8rem;">Saved.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPut(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    async function loadSettings() {
+      const config = await apiGet('/settings');
+      if (!config) return;
+
+      document.getElementById('schoolCode').value = config.schoolCode || '';
+      document.getElementById('schoolName').value = config.schoolName || '';
+      document.getElementById('logoUrl').value = config.logoUrl || '';
+      document.getElementById('contactEmail').value = config.contactEmail || '';
+      document.getElementById('contactPhone').value = config.contactPhone || '';
+      document.getElementById('attendanceAbsenceThreshold').value = config.attendanceAbsenceThreshold;
+      document.getElementById('attendanceRateThreshold').value = config.attendanceRateThreshold;
+      document.getElementById('performanceDeclineThreshold').value = config.performanceDeclineThreshold;
+      document.getElementById('performanceLowThreshold').value = config.performanceLowThreshold;
+
+      if (config.logoUrl) {
+        const preview = document.getElementById('logoPreview');
+        preview.src = config.logoUrl;
+        preview.style.display = 'block';
+      }
+    }
+
+    document.getElementById('saveInfoBtn').addEventListener('click', async () => {
+      const body = {
+        schoolCode: document.getElementById('schoolCode').value.trim(),
+        schoolName: document.getElementById('schoolName').value.trim(),
+        logoUrl: document.getElementById('logoUrl').value.trim(),
+        contactEmail: document.getElementById('contactEmail').value.trim(),
+        contactPhone: document.getElementById('contactPhone').value.trim(),
+      };
+      const result = await apiPut('/settings', body);
+      const successBox = document.getElementById('infoSuccess');
+      successBox.textContent = result.ok ? 'Saved.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+      if (result.ok) loadSettings();
+    });
+
+    document.getElementById('saveThresholdsBtn').addEventListener('click', async () => {
+      const body = {
+        attendanceAbsenceThreshold: parseInt(document.getElementById('attendanceAbsenceThreshold').value),
+        attendanceRateThreshold: parseFloat(document.getElementById('attendanceRateThreshold').value),
+        performanceDeclineThreshold: parseFloat(document.getElementById('performanceDeclineThreshold').value),
+        performanceLowThreshold: parseFloat(document.getElementById('performanceLowThreshold').value),
+      };
+      const result = await apiPut('/settings', body);
+      const successBox = document.getElementById('thresholdSuccess');
+      successBox.textContent = result.ok ? 'Saved.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+    });
+
+    (async function init() {
+      await loadSettings();
+    })();
+  </script>
+</body>
+</html>
