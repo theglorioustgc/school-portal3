@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gradebook — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .filter-row {
+      display: flex; gap: 0.75rem; align-items: flex-end;
+      margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .filter-row .field { margin-bottom: 0; min-width: 180px; }
+    .grade-input {
+      width: 60px; padding: 0.4rem; border: 1.5px solid var(--line);
+      border-radius: 7px; font-family: var(--font-mono); font-size: 0.85rem; text-align: center;
+    }
+    .grade-input:disabled { background: var(--paper); color: var(--slate); }
+    .row-total { font-weight: 600; }
+    .save-row-btn {
+      padding: 0.3rem 0.7rem; border-radius: 100px; border: 1.5px solid var(--line);
+      background: var(--paper-raised); font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .locked-pill { font-size: 0.72rem; color: var(--slate); }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav id="sidebarNav">
+        <a href="teacher-dashboard.html">Dashboard</a>
+        <a href="gradebook.html" class="active">Gradebook</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main" style="width: 100%;">
+      <div class="eyebrow">Gradebook</div>
+      <h1 style="margin-bottom: 1.5rem;">Enter grades</h1>
+
+      <div class="card">
+        <div class="filter-row">
+          <div class="field">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+          <div class="field">
+            <label for="subjectSelect">Subject</label>
+            <select id="subjectSelect"></select>
+          </div>
+          <div class="field">
+            <label for="termSelect">Term</label>
+            <select id="termSelect"></select>
+          </div>
+          <button class="btn-secondary" id="loadBtn">Load</button>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th id="ca1Header">CA1</th>
+              <th id="ca2Header">CA2</th>
+              <th id="ca3Header">CA3</th>
+              <th id="examHeader">Exam</th>
+              <th>Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="gradeTableBody">
+            <tr><td colspan="7" class="empty-state">Pick a class, subject, and term, then click Load.</td></tr>
+          </tbody>
+        </table>
+
+        <button class="btn-primary" id="submitAllBtn" style="margin-top: 1.25rem;">Submit (lock) all saved grades</button>
+        <div class="success-message" id="successBox" style="margin-top: 0.8rem;">Done.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || (role !== 'teacher' && role !== 'admin')) window.location.href = 'index.html';
+
+    if (role === 'admin') {
+      document.getElementById('sidebarNav').innerHTML = `
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html" class="active">Gradebook</a>
+        <a href="#" id="logoutLink">Log out</a>
+      `;
+    }
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    let myId = null;
+    let marksConfig = { ca1Max: 10, ca2Max: 10, ca3Max: 10, examMax: 70 };
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    async function loadFilters() {
+      const me = await apiGet('/auth/me');
+      myId = me.id;
+
+      let classes, subjects;
+      if (role === 'teacher') {
+        const assignments = await apiGet(`/teacher-assignments?teacherId=${myId}`);
+        const seenClasses = new Map();
+        const seenSubjects = new Map();
+        assignments.forEach(a => { seenClasses.set(a.classId, a.class); seenSubjects.set(a.subjectId, a.subject); });
+        classes = [...seenClasses.values()];
+        subjects = [...seenSubjects.values()];
+      } else {
+        classes = await apiGet('/classes');
+        subjects = await apiGet('/subjects');
+      }
+
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('subjectSelect').innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+      const terms = await apiGet('/terms');
+      const termSelect = document.getElementById('termSelect');
+      termSelect.innerHTML = terms.map(t => `<option value="${t.name}" ${t.isCurrent ? 'selected' : ''}>${t.name}</option>`).join('');
+
+      marksConfig = await apiGet('/grading-scheme/marks-config');
+      document.getElementById('ca1Header').textContent = `CA1 (/${marksConfig.ca1Max})`;
+      document.getElementById('ca2Header').textContent = `CA2 (/${marksConfig.ca2Max})`;
+      document.getElementById('ca3Header').textContent = `CA3 (/${marksConfig.ca3Max})`;
+      document.getElementById('examHeader').textContent = `Exam (/${marksConfig.examMax})`;
+    }
+
+    function recalcRowTotal(row) {
+      const ca1 = parseFloat(row.querySelector('.ca1-input').value) || 0;
+      const ca2 = parseFloat(row.querySelector('.ca2-input').value) || 0;
+      const ca3 = parseFloat(row.querySelector('.ca3-input').value) || 0;
+      const exam = parseFloat(row.querySelector('.exam-input').value) || 0;
+      row.querySelector('.row-total').textContent = ca1 + ca2 + ca3 + exam;
+    }
+
+    async function loadGradebook() {
+      const classId = document.getElementById('classSelect').value;
+      const subjectId = document.getElementById('subjectSelect').value;
+      const term = document.getElementById('termSelect').value;
+      if (!classId || !subjectId || !term) return;
+
+      const students = await apiGet(`/students?classId=${classId}`);
+      const existing = await apiGet(`/gradebook?classId=${classId}&subjectId=${subjectId}&term=${encodeURIComponent(term)}`);
+      const byStudent = {};
+      existing.forEach(r => { byStudent[r.studentId] = r; });
+
+      const body = document.getElementById('gradeTableBody');
+      if (students.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-state">No students in this class.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = students.map(s => {
+        const r = byStudent[s.id];
+        const locked = r?.status === 'submitted';
+        return `
+          <tr data-student="${s.id}">
+            <td>${s.firstName} ${s.lastName}</td>
+            <td><input type="number" class="grade-input ca1-input" value="${r?.ca1 ?? ''}" ${locked ? 'disabled' : ''} /></td>
+            <td><input type="number" class="grade-input ca2-input" value="${r?.ca2 ?? ''}" ${locked ? 'disabled' : ''} /></td>
+            <td><input type="number" class="grade-input ca3-input" value="${r?.ca3 ?? ''}" ${locked ? 'disabled' : ''} /></td>
+            <td><input type="number" class="grade-input exam-input" value="${r?.exam ?? ''}" ${locked ? 'disabled' : ''} /></td>
+            <td class="row-total">${r?.total ?? 0}</td>
+            <td>${locked ? '<span class="locked-pill">Locked</span>' : '<button class="save-row-btn">Save</button>'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      document.querySelectorAll('#gradeTableBody tr').forEach(row => {
+        row.querySelectorAll('.grade-input').forEach(input => {
+          input.addEventListener('input', () => recalcRowTotal(row));
+        });
+        const saveBtn = row.querySelector('.save-row-btn');
+        if (saveBtn) {
+          saveBtn.addEventListener('click', async () => {
+            const studentId = row.dataset.student;
+            const ca1 = row.querySelector('.ca1-input').value;
+            const ca2 = row.querySelector('.ca2-input').value;
+            const ca3 = row.querySelector('.ca3-input').value;
+            const exam = row.querySelector('.exam-input').value;
+
+            await apiPost('/gradebook/save', {
+              studentId, classId, subjectId, term,
+              ca1: ca1 ? parseFloat(ca1) : null,
+              ca2: ca2 ? parseFloat(ca2) : null,
+              ca3: ca3 ? parseFloat(ca3) : null,
+              exam: exam ? parseFloat(exam) : null,
+            });
+
+            saveBtn.textContent = 'Saved';
+            setTimeout(() => { saveBtn.textContent = 'Save'; }, 1500);
+          });
+        }
+      });
+    }
+
+    document.getElementById('loadBtn').addEventListener('click', loadGradebook);
+
+    document.getElementById('submitAllBtn').addEventListener('click', async () => {
+      const classId = document.getElementById('classSelect').value;
+      const subjectId = document.getElementById('subjectSelect').value;
+      const term = document.getElementById('termSelect').value;
+      if (!classId || !subjectId || !term) return;
+
+      const result = await apiPost('/gradebook/submit', { classId, subjectId, term });
+      const successBox = document.getElementById('successBox');
+      successBox.textContent = result.ok ? `${result.data.submittedCount} record(s) submitted and locked.` : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 3000);
+      loadGradebook();
+    });
+
+    (async function init() {
+      await loadFilters();
+    })();
+  </script>
+</body>
+</html>
