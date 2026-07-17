@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Content — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout { display: grid; grid-template-columns: 380px 1fr; gap: 1.5rem; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .post-item { border-bottom: 1px solid var(--line); padding: 1rem 0; }
+    .post-item:last-child { border-bottom: none; }
+    .post-item h3 { font-size: 1rem; margin-bottom: 0.3rem; }
+    .post-item .meta { font-size: 0.75rem; color: var(--slate); margin-bottom: 0.4rem; }
+    .post-item p { font-size: 0.9rem; color: var(--ink-soft); margin-bottom: 0.6rem; }
+    .publish-toggle-btn {
+      padding: 0.3rem 0.8rem; border-radius: 100px; border: 1.5px solid var(--line);
+      background: var(--paper-raised); font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .publish-toggle-btn.published { background: rgba(47,143,91,0.12); color: var(--success); border-color: rgba(47,143,91,0.3); }
+    .delete-btn { background: none; border: none; color: var(--error); font-size: 0.75rem; cursor: pointer; margin-left: 0.5rem; }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html">Grading Scheme</a>
+        <a href="settings.html">Settings</a>
+        <a href="flags.html">Flags</a>
+        <a href="documents.html">Documents</a>
+        <a href="content.html" class="active">Content</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Content / news</h1>
+
+      <div class="layout">
+        <div class="card">
+          <div class="section-title" style="font-size:1.05rem; margin-bottom:1rem;">New post</div>
+          <div class="field">
+            <label for="title">Title</label>
+            <input type="text" id="title" />
+          </div>
+          <div class="field">
+            <label for="body">Body</label>
+            <textarea id="body" rows="4"></textarea>
+          </div>
+          <div class="field">
+            <label for="imageUrl">Image URL (optional)</label>
+            <input type="text" id="imageUrl" />
+          </div>
+          <div class="field">
+            <label for="category">Category (optional)</label>
+            <input type="text" id="category" placeholder="e.g. news, achievement" />
+          </div>
+          <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.85rem; margin-bottom:1rem;">
+            <input type="checkbox" id="publishedCheckbox" /> Publish immediately
+          </label>
+          <button class="btn-primary" id="createBtn">Create post</button>
+          <div class="success-message" id="successBox" style="margin-top: 0.8rem;">Saved.</div>
+        </div>
+
+        <div class="card">
+          <div class="section-title" style="font-size:1.05rem; margin-bottom:0.5rem;">All posts</div>
+          <div id="postList"><p class="empty-state">Loading…</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+    async function apiPatch(path, body) {
+      await fetch(`${API_BASE_URL}${path}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    }
+    async function apiDelete(path) {
+      await fetch(`${API_BASE_URL}${path}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    async function loadPosts() {
+      const posts = await apiGet('/content');
+      const container = document.getElementById('postList');
+      if (posts.length === 0) {
+        container.innerHTML = '<p class="empty-state">No posts yet.</p>';
+        return;
+      }
+      container.innerHTML = posts.map(p => `
+        <div class="post-item">
+          <h3>${p.title}</h3>
+          <div class="meta">${p.category || 'uncategorized'} · ${new Date(p.createdAt).toLocaleDateString()}</div>
+          <p>${p.body}</p>
+          <button class="publish-toggle-btn ${p.published ? 'published' : ''}" data-id="${p.id}" data-published="${p.published}">
+            ${p.published ? 'Published' : 'Unpublished — click to publish'}
+          </button>
+          <button class="delete-btn" data-id="${p.id}">Remove</button>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.publish-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const published = btn.dataset.published === 'true';
+          await apiPatch(`/content/${btn.dataset.id}/publish`, { published: !published });
+          loadPosts();
+        });
+      });
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await apiDelete(`/content/${btn.dataset.id}`);
+          loadPosts();
+        });
+      });
+    }
+
+    document.getElementById('createBtn').addEventListener('click', async () => {
+      const title = document.getElementById('title').value.trim();
+      const body = document.getElementById('body').value.trim();
+      const imageUrl = document.getElementById('imageUrl').value.trim();
+      const category = document.getElementById('category').value.trim();
+      const published = document.getElementById('publishedCheckbox').checked;
+      if (!title || !body) return;
+
+      const result = await apiPost('/content', { title, body, imageUrl, category, published });
+      const successBox = document.getElementById('successBox');
+      successBox.textContent = result.ok ? 'Post created.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+
+      if (result.ok) {
+        document.getElementById('title').value = '';
+        document.getElementById('body').value = '';
+        document.getElementById('imageUrl').value = '';
+        document.getElementById('category').value = '';
+        document.getElementById('publishedCheckbox').checked = false;
+        loadPosts();
+      }
+    });
+
+    (async function init() {
+      await loadPosts();
+    })();
+  </script>
+</body>
+</html>
