@@ -90,9 +90,10 @@
 
        <div class="new-feetype-row" style="flex-direction: column; align-items: flex-start;">
      <div style="display:flex; gap:0.6rem; width:100%;">
-       <input type="text" id="newFeeName" placeholder="New fee type name (e.g. Tuition Term 3)" style="flex:1;" />
-       <input type="number" id="newFeeAmount" placeholder="Amount (optional)" style="width: 160px;" />
-     </div>
+     <input type="text" id="newFeeName" placeholder="New fee type name (e.g. Tuition Term 3)" style="flex:1;" />
+     <input type="number" id="newFeeAmount" placeholder="Amount (optional)" style="width: 160px;" />
+     <select id="newFeeTerm" style="min-width: 160px;"></select>
+   </div>
      <div style="margin-top: 0.8rem;">
        <div class="eyebrow" style="margin-bottom: 0.4rem;">Applies to</div>
        <div id="newFeeClassCheckboxes" style="display:flex; gap:1rem; flex-wrap:wrap;"></div>
@@ -195,6 +196,7 @@ document.getElementById('classSelect').addEventListener('change', () => {
     document.getElementById('createFeeTypeBtn').addEventListener('click', async () => {
      const name = document.getElementById('newFeeName').value.trim();
      const amount = document.getElementById('newFeeAmount').value;
+     const term = document.getElementById('newFeeTerm').value;
      if (!name) return;
 
      const classIds = Array.from(document.querySelectorAll('.fee-class-checkbox:checked')).map(cb => cb.value);
@@ -202,7 +204,7 @@ document.getElementById('classSelect').addEventListener('change', () => {
      await fetch(`${API_BASE_URL}/fee-types`, {
        method: 'POST',
        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-       body: JSON.stringify({ name, amount: amount ? parseFloat(amount) : null, classIds }),
+       body: JSON.stringify({ name, amount: amount ? parseFloat(amount) : null, term, classIds }),
      });
 
      document.getElementById('newFeeName').value = '';
@@ -211,9 +213,15 @@ document.getElementById('classSelect').addEventListener('change', () => {
      await loadFeeTypes(document.getElementById('classSelect').value);
    });
 
+   async function loadTermOptions() {
+     const terms = await apiGet('/terms');
+     document.getElementById('newFeeTerm').innerHTML = terms.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+   }
+
    (async function init() {
      await loadClasses();
      await loadClassCheckboxes();
+     await loadTermOptions();
      await loadFeeTypes(document.getElementById('classSelect').value);
      await loadFeeStatus();
    })();
