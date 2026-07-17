@@ -90,7 +90,20 @@
           <div id="subjectList"><p class="empty-state">Loading…</p></div>
         </div>
       </div>
-
+<div class="card assign-section" style="margin-top: 2rem;">
+         <h2>Terms</h2>
+         <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">
+           Create once here — every gradebook, exam, and fee screen picks from this list instead of free-typing a term name.
+         </p>
+         <div class="assign-row">
+           <div class="field">
+             <label for="newTermName">Term name</label>
+             <input type="text" id="newTermName" placeholder="e.g. Term 3, 2026" />
+           </div>
+           <button class="btn-secondary" id="addTermBtn">Add term</button>
+         </div>
+         <div id="termList" style="margin-top: 1rem;"></div>
+       </div>
       <div class="card assign-section">
         <h2>Assign a teacher</h2>
         <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">
@@ -172,7 +185,42 @@
           `).join('');
       return subjects;
     }
+async function loadTerms() {
+     const terms = await apiGet('/terms');
+     const container = document.getElementById('termList');
+     if (terms.length === 0) {
+       container.innerHTML = '<p class="empty-state">No terms yet.</p>';
+       return;
+     }
+     container.innerHTML = terms.map(t => `
+       <div class="list-item">
+         <span>${t.name} ${t.isCurrent ? '<span class="pill pill-success">Current</span>' : ''}</span>
+         <span>
+           ${!t.isCurrent ? `<button class="btn-secondary set-current-btn" data-id="${t.id}" style="font-size:0.78rem; padding:0.3rem 0.7rem; margin-right:0.4rem;">Set current</button>` : ''}
+           <button class="delete-btn" data-id="${t.id}" data-type="term">Remove</button>
+         </span>
+       </div>
+     `).join('');
 
+     document.querySelectorAll('.set-current-btn').forEach(btn => {
+       btn.addEventListener('click', async () => {
+         await apiPost(`/terms/${btn.dataset.id}/set-current`, {});
+         loadTerms();
+       });
+     });
+   }
+
+   document.getElementById('addTermBtn').addEventListener('click', async () => {
+     const name = document.getElementById('newTermName').value.trim();
+     if (!name) return;
+     const result = await apiPost('/terms', { name });
+     if (result.ok) {
+       document.getElementById('newTermName').value = '';
+       loadTerms();
+     } else {
+       alert(result.data.error || 'Could not add term');
+     }
+   });
     async function loadTeachers() {
       const teachers = await apiGet('/teachers');
       document.getElementById('assignTeacher').innerHTML = teachers.map(t => `<option value="${t.id}">${t.firstName} ${t.lastName} (${t.teacherId})</option>`).join('');
@@ -187,15 +235,17 @@
     }
 
     function attachDeleteHandlers() {
-      document.querySelectorAll('.delete-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const type = btn.dataset.type;
-          const id = btn.dataset.id;
-          await apiDelete(type === 'class' ? `/classes/${id}` : `/subjects/${id}`);
-          refreshAll();
-        });
-      });
-    }
+     document.querySelectorAll('.delete-btn').forEach(btn => {
+       btn.addEventListener('click', async () => {
+         const type = btn.dataset.type;
+         const id = btn.dataset.id;
+         if (type === 'class') await apiDelete(`/classes/${id}`);
+         else if (type === 'subject') await apiDelete(`/subjects/${id}`);
+         else if (type === 'term') { await apiDelete(`/terms/${id}`); loadTerms(); return; }
+         refreshAll();
+       });
+     });
+   }
 
     document.getElementById('addClassBtn').addEventListener('click', async () => {
       const name = document.getElementById('newClassName').value.trim();
@@ -241,6 +291,7 @@
     (async function init() {
       await refreshAll();
       await loadTeachers();
+      await loadTerms();
     })();
   </script>
 </body>
