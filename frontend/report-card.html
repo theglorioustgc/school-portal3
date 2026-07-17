@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Report Card — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .controls {
+      max-width: 720px;
+      margin: 0 auto 1.5rem;
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .controls .field { margin-bottom: 0; }
+
+    .sheet {
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--paper-raised);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 2.5rem;
+    }
+
+    .rc-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      border-bottom: 2px solid var(--ink);
+      padding-bottom: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .rc-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+    .rc-logo-placeholder {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      background: var(--ink);
+      color: var(--ochre);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.3rem;
+    }
+    .rc-header h1 { font-size: 1.4rem; }
+    .rc-header p { font-size: 0.8rem; color: var(--slate); }
+
+    .rc-student-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem 1.5rem;
+      margin-bottom: 1.75rem;
+      font-size: 0.9rem;
+    }
+    .rc-student-grid .label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--slate);
+    }
+
+    .rc-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-top: 1.75rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+    }
+    .rc-summary .num {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 600;
+    }
+    .rc-summary .lbl {
+      font-size: 0.72rem;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .rc-remark {
+      margin-top: 1.5rem;
+      font-size: 0.88rem;
+      color: var(--ink-soft);
+    }
+
+    .print-btn-row {
+      max-width: 720px;
+      margin: 1.5rem auto 0;
+      text-align: right;
+    }
+
+    @media print {
+      .app-sidebar, .controls, .print-btn-row, .eyebrow { display: none !important; }
+      body { background: white; }
+      .sheet { border: none; box-shadow: none; margin: 0; max-width: 100%; }
+      .app-main { padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav id="sidebarNav"></nav>
+    </div>
+
+    <div class="app-main" style="width: 100%;">
+      <div class="eyebrow">Report Card</div>
+
+      <div class="controls" id="controlsRow" style="display:none;">
+        <div class="field">
+          <label for="studentIdInput">Student</label>
+          <select id="studentIdInput" style="min-width:220px;"></select>
+        </div>
+        <div class="field">
+          <label for="termInput">Term</label>
+          <input type="text" id="termInput" placeholder="Term 2, 2026" />
+        </div>
+        <button class="btn-secondary" id="loadBtn">Load</button>
+      </div>
+
+      <div id="reportContainer">
+        <p class="text-slate" style="text-align:center;">Loading…</p>
+      </div>
+
+      <div class="print-btn-row" id="printRow" style="display:none;">
+        <button class="btn-primary" onclick="window.print()">Print / Save as PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token) window.location.href = 'index.html';
+
+    const navByRole = {
+      admin: `<a href="admin-dashboard.html">Dashboard</a><a href="register.html">Register</a><a href="classes.html">Classes</a><a href="announcements.html">Announcements</a><a href="fees.html">Fees</a><a href="report-card.html" class="active">Report Cards</a><a href="#" id="logoutLink">Log out</a>`,
+      teacher: `<a href="teacher-dashboard.html">Dashboard</a><a href="#" id="logoutLink">Log out</a>`,
+      student: `<a href="student-dashboard.html">Dashboard</a><a href="report-card.html" class="active">Report Card</a><a href="#" id="logoutLink">Log out</a>`,
+      bursar: `<a href="bursar-dashboard.html">Fee confirmation</a><a href="#" id="logoutLink">Log out</a>`,
+    };
+    document.getElementById('sidebarNav').innerHTML = navByRole[role] || '';
+    document.getElementById('logoutLink')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function renderReport(rc) {
+      const container = document.getElementById('reportContainer');
+      const school = rc.school;
+      const logoHtml = school?.logoUrl
+        ? `<img src="${school.logoUrl}" class="rc-logo" alt="School logo" />`
+        : `<div class="rc-logo-placeholder">${(school?.schoolName || 'S')[0]}</div>`;
+
+      const rows = rc.subjects.map(s => `
+        <tr>
+          <td>${s.subject}</td>
+          <td>${s.ca1 ?? '—'}</td>
+          <td>${s.ca2 ?? '—'}</td>
+          <td>${s.ca3 ?? '—'}</td>
+          <td>${s.exam ?? '—'}</td>
+          <td><strong>${s.total ?? '—'}</strong></td>
+          <td>${s.grade ?? '—'}</td>
+          <td>${s.remark ?? '—'}</td>
+        </tr>
+      `).join('');
+
+      container.innerHTML = `
+        <div class="sheet">
+          <div class="rc-header">
+            ${logoHtml}
+            <div>
+              <h1>${school?.schoolName || 'School Report Card'}</h1>
+              <p>${school?.contactEmail || ''} ${school?.contactPhone ? '· ' + school.contactPhone : ''}</p>
+            </div>
+          </div>
+
+          <div class="rc-student-grid">
+            <div><div class="label">Student</div>${rc.student.firstName} ${rc.student.lastName}</div>
+            <div><div class="label">Student ID</div>${rc.student.studentId}</div>
+            <div><div class="label">Class</div>${rc.student.className || '—'}</div>
+            <div><div class="label">Term</div>${rc.term}</div>
+          </div>
+
+          <table>
+            <thead>
+              <tr><th>Subject</th><th>CA1</th><th>CA2</th><th>CA3</th><th>Exam</th><th>Total</th><th>Grade</th><th>Remark</th></tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="8" class="empty-state">No submitted subjects yet.</td></tr>'}</tbody>
+          </table>
+
+          <div class="rc-summary">
+            <div><div class="num">${rc.totalScore ?? '—'}</div><div class="lbl">Total</div></div>
+            <div><div class="num">${rc.average !== null ? rc.average.toFixed(1) : '—'}</div><div class="lbl">Average</div></div>
+            <div><div class="num">${rc.position ?? '—'}</div><div class="lbl">Position</div></div>
+            <div><div class="num">${rc.overallGrade ?? '—'}</div><div class="lbl">Overall Grade</div></div>
+          </div>
+
+          <p class="rc-remark">${rc.subjectsSubmitted} of ${rc.subjectsExpected} subjects submitted · ${rc.overallRemark || ''}</p>
+        </div>
+      `;
+      document.getElementById('printRow').style.display = 'block';
+    }
+
+    async function loadForStudent(studentId, term) {
+      const container = document.getElementById('reportContainer');
+      container.innerHTML = '<p class="text-slate" style="text-align:center;">Loading…</p>';
+      document.getElementById('printRow').style.display = 'none';
+      try {
+        const rc = await apiGet(`/exams/report-card?studentId=${studentId}&term=${encodeURIComponent(term)}`);
+        renderReport(rc);
+      } catch (err) {
+        container.innerHTML = `<p class="text-slate" style="text-align:center;">${err.message}</p>`;
+      }
+    }
+
+    async function initAdmin() {
+      document.getElementById('controlsRow').style.display = 'flex';
+      const students = await apiGet('/students');
+      document.getElementById('studentIdInput').innerHTML = students.map(s => `<option value="${s.id}">${s.firstName} ${s.lastName} (${s.studentId})</option>`).join('');
+      document.getElementById('loadBtn').addEventListener('click', () => {
+        const studentId = document.getElementById('studentIdInput').value;
+        const term = document.getElementById('termInput').value.trim();
+        if (studentId && term) loadForStudent(studentId, term);
+      });
+    }
+
+    async function initStudent() {
+      const me = await apiGet('/auth/me');
+      // Default term guess: today's data has "Term 2, 2026" — student can be shown a simple prompt instead
+      const term = prompt('Enter the term to view (e.g. Term 2, 2026):', 'Term 2, 2026');
+      if (term) loadForStudent(me.id, term);
+    }
+
+    (async function init() {
+      if (role === 'admin') await initAdmin();
+      else if (role === 'student') await initStudent();
+      else document.getElementById('reportContainer').innerHTML = '<p class="text-slate" style="text-align:center;">Report cards are only available to admins and students.</p>';
+    })();
+  </script>
+</body>
+</html>
