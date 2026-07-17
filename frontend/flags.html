@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flags — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .filter-row { display: flex; gap: 0.75rem; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .filter-row .field { margin-bottom: 0; min-width: 180px; }
+    .flag-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.7rem 0; border-bottom: 1px solid var(--line);
+    }
+    .flag-row:last-child { border-bottom: none; }
+    .flag-type-pill {
+      font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 100px;
+    }
+    .flag-attendance { background: rgba(232,169,60,0.18); color: #8a6110; }
+    .flag-performance_declining { background: rgba(193,68,60,0.1); color: var(--error); }
+    .flag-performance_low { background: rgba(193,68,60,0.15); color: var(--error); }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html">Grading Scheme</a>
+        <a href="settings.html">Settings</a>
+        <a href="flags.html" class="active">Flags</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Early-warning flags</h1>
+
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.05rem; margin-bottom: 0.8rem;">Run checks</h2>
+        <div class="filter-row">
+          <button class="btn-secondary" id="runAttendanceBtn">Run attendance check</button>
+          <div class="field">
+            <label for="currentTermSelect">Current term</label>
+            <select id="currentTermSelect"></select>
+          </div>
+          <div class="field">
+            <label for="previousTermSelect">Previous term (optional)</label>
+            <select id="previousTermSelect"><option value="">— none —</option></select>
+          </div>
+          <button class="btn-secondary" id="runPerformanceBtn">Run performance check</button>
+        </div>
+        <div class="success-message" id="runSuccess" style="margin-top: 0.8rem;"></div>
+      </div>
+
+      <div class="card">
+        <div class="filter-row">
+          <div class="field" style="min-width: 260px;">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+          <button class="btn-secondary" id="loadBtn">Load flags</button>
+        </div>
+        <div id="flagList"><p class="empty-state">Pick a class and click Load flags.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body || {}),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    async function loadFilters() {
+      const classes = await apiGet('/classes');
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+      const terms = await apiGet('/terms');
+      const termOptions = terms.map(t => `<option value="${t.name}" ${t.isCurrent ? 'selected' : ''}>${t.name}</option>`).join('');
+      document.getElementById('currentTermSelect').innerHTML = termOptions;
+      document.getElementById('previousTermSelect').innerHTML += termOptions;
+    }
+
+    document.getElementById('runAttendanceBtn').addEventListener('click', async () => {
+      const result = await apiPost('/flags/run-attendance-check');
+      const box = document.getElementById('runSuccess');
+      box.textContent = result.ok ? `${result.data.flagsCreated} new flag(s) created.` : (result.data.error || 'Something went wrong.');
+      box.classList.add('visible');
+      setTimeout(() => box.classList.remove('visible'), 3500);
+    });
+
+    document.getElementById('runPerformanceBtn').addEventListener('click', async () => {
+      const currentTerm = document.getElementById('currentTermSelect').value;
+      const previousTerm = document.getElementById('previousTermSelect').value;
+      const result = await apiPost('/flags/run-performance-check', { currentTerm, previousTerm: previousTerm || undefined });
+      const box = document.getElementById('runSuccess');
+      box.textContent = result.ok ? `${result.data.flagsCreated} new flag(s) created.` : (result.data.error || 'Something went wrong.');
+      box.classList.add('visible');
+      setTimeout(() => box.classList.remove('visible'), 3500);
+    });
+
+    document.getElementById('loadBtn').addEventListener('click', async () => {
+      const classId = document.getElementById('classSelect').value;
+      const flags = await apiGet(`/flags/class/${classId}`);
+      const students = await apiGet(`/students?classId=${classId}`);
+      const byId = {};
+      students.forEach(s => { byId[s.id] = s; });
+
+      const container = document.getElementById('flagList');
+      if (flags.length === 0) {
+        container.innerHTML = '<p class="empty-state">No flags for this class.</p>';
+        return;
+      }
+      container.innerHTML = flags.map(f => {
+        const student = byId[f.studentId];
+        const name = student ? `${student.firstName} ${student.lastName}` : f.studentId;
+        return `
+          <div class="flag-row">
+            <div>
+              <span class="flag-type-pill flag-${f.flagType}">${f.flagType.replace('_', ' ')}</span>
+              <strong style="margin-left:0.5rem;">${name}</strong>
+              <div class="text-slate" style="font-size:0.85rem; margin-top:0.2rem;">${f.message}</div>
+            </div>
+            <div class="text-slate" style="font-size:0.78rem;">${new Date(f.createdAt).toLocaleDateString()}</div>
+          </div>
+        `;
+      }).join('');
+    });
+
+    (async function init() {
+      await loadFilters();
+    })();
+  </script>
+</body>
+</html>
