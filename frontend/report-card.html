@@ -121,16 +121,16 @@
       <div class="eyebrow">Report Card</div>
 
       <div class="controls" id="controlsRow" style="display:none;">
-        <div class="field">
-          <label for="studentIdInput">Student</label>
-          <select id="studentIdInput" style="min-width:220px;"></select>
-        </div>
-        <div class="field">
-          <label for="termInput">Term</label>
-          <input type="text" id="termInput" placeholder="Term 2, 2026" />
-        </div>
-        <button class="btn-secondary" id="loadBtn">Load</button>
-      </div>
+     <div class="field">
+       <label for="studentIdInput">Student</label>
+       <select id="studentIdInput" style="min-width:220px;"></select>
+     </div>
+     <div class="field">
+       <label for="termInput">Term</label>
+       <select id="termInput" style="min-width:180px;"></select>
+     </div>
+     <button class="btn-secondary" id="loadBtn">Load</button>
+   </div>
 
       <div id="reportContainer">
         <p class="text-slate" style="text-align:center;">Loading…</p>
@@ -238,23 +238,59 @@
       }
     }
 
-    async function initAdmin() {
-      document.getElementById('controlsRow').style.display = 'flex';
-      const students = await apiGet('/students');
-      document.getElementById('studentIdInput').innerHTML = students.map(s => `<option value="${s.id}">${s.firstName} ${s.lastName} (${s.studentId})</option>`).join('');
-      document.getElementById('loadBtn').addEventListener('click', () => {
-        const studentId = document.getElementById('studentIdInput').value;
-        const term = document.getElementById('termInput').value.trim();
-        if (studentId && term) loadForStudent(studentId, term);
-      });
-    }
+    async function loadTermsFor(studentId) {
+     const termSelect = document.getElementById('termInput');
+     try {
+       const terms = await apiGet(`/exams/report-card/terms?studentId=${studentId}`);
+       if (terms.length === 0) {
+         termSelect.innerHTML = '<option value="">No published results yet</option>';
+         return null;
+       }
+       termSelect.innerHTML = terms.map(t => `<option value="${t}">${t}</option>`).join('');
+       return terms[0];
+     } catch (err) {
+       termSelect.innerHTML = '<option value="">Could not load terms</option>';
+       return null;
+     }
+   }
 
-    async function initStudent() {
-      const me = await apiGet('/auth/me');
-      // Default term guess: today's data has "Term 2, 2026" — student can be shown a simple prompt instead
-      const term = prompt('Enter the term to view (e.g. Term 2, 2026):', 'Term 2, 2026');
-      if (term) loadForStudent(me.id, term);
-    }
+   async function initAdmin() {
+     document.getElementById('controlsRow').style.display = 'flex';
+     const students = await apiGet('/students');
+     const studentSelect = document.getElementById('studentIdInput');
+     studentSelect.innerHTML = students.map(s => `<option value="${s.id}">${s.firstName} ${s.lastName} (${s.studentId})</option>`).join('');
+
+     async function refreshTermsAndLoad() {
+       const studentId = studentSelect.value;
+       const firstTerm = await loadTermsFor(studentId);
+       if (firstTerm) loadForStudent(studentId, firstTerm);
+       else document.getElementById('reportContainer').innerHTML = '<p class="text-slate" style="text-align:center;">No published results yet for this student.</p>';
+     }
+
+     studentSelect.addEventListener('change', refreshTermsAndLoad);
+     document.getElementById('loadBtn').addEventListener('click', () => {
+       const studentId = studentSelect.value;
+       const term = document.getElementById('termInput').value;
+       if (studentId && term) loadForStudent(studentId, term);
+     });
+
+     await refreshTermsAndLoad();
+   }
+
+   async function initStudent() {
+     document.getElementById('controlsRow').style.display = 'flex';
+     document.querySelector('label[for="studentIdInput"]').parentElement.style.display = 'none'; // students only pick their own term
+     const me = await apiGet('/auth/me');
+
+     const firstTerm = await loadTermsFor(me.id);
+     if (firstTerm) loadForStudent(me.id, firstTerm);
+     else document.getElementById('reportContainer').innerHTML = '<p class="text-slate" style="text-align:center;">No published results yet.</p>';
+
+     document.getElementById('loadBtn').addEventListener('click', () => {
+       const term = document.getElementById('termInput').value;
+       if (term) loadForStudent(me.id, term);
+     });
+   }
 
     (async function init() {
       if (role === 'admin') await initAdmin();
