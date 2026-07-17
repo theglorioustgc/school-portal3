@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exam Marking — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .filter-row {
+      display: flex; gap: 0.75rem; align-items: flex-end;
+      margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .filter-row .field { margin-bottom: 0; min-width: 180px; }
+    .question-row {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.5rem 0; border-bottom: 1px solid var(--line);
+    }
+    .question-row:last-child { border-bottom: none; }
+    .q-number { font-family: var(--font-mono); font-size: 0.8rem; color: var(--slate); width: 60px; }
+    .option-btn {
+      width: 34px; height: 34px; border-radius: 7px; border: 1.5px solid var(--line);
+      background: var(--paper-raised); font-weight: 600; cursor: pointer; font-size: 0.85rem;
+    }
+    .option-btn.selected { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .section-divider { border-top: 1px solid var(--line); margin: 2rem 0; padding-top: 2rem; }
+    .live-score {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 600;
+    }
+    .score-breakdown { font-size: 0.85rem; color: var(--slate); margin-top: 0.2rem; }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav id="sidebarNav">
+        <a href="teacher-dashboard.html">Dashboard</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html" class="active">Exam Marking</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main" style="width: 100%;">
+      <div class="eyebrow">Exam Marking</div>
+      <h1 style="margin-bottom: 1.5rem;">Objective exam tools</h1>
+
+      <div class="card">
+        <div class="filter-row">
+          <div class="field">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+          <div class="field">
+            <label for="subjectSelect">Subject</label>
+            <select id="subjectSelect"></select>
+          </div>
+          <div class="field">
+            <label for="termSelect">Term</label>
+            <select id="termSelect"></select>
+          </div>
+          <div class="field">
+            <label for="questionCount">Questions</label>
+            <input type="number" id="questionCount" value="10" min="1" max="100" style="width: 80px;" />
+          </div>
+          <button class="btn-secondary" id="loadBtn">Load</button>
+        </div>
+
+        <div id="answerKeyStatus" class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;"></div>
+
+        <div id="answerKeyGrid"></div>
+        <button class="btn-primary" id="saveKeyBtn" style="margin-top: 1rem;">Save answer key</button>
+        <div class="success-message" id="keySuccess" style="margin-top: 0.8rem;">Answer key saved.</div>
+      </div>
+
+      <div class="card section-divider">
+        <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Mark a student</h2>
+        <div class="filter-row">
+          <div class="field" style="min-width: 260px;">
+            <label for="studentSelect">Student</label>
+            <select id="studentSelect"></select>
+          </div>
+          <button class="btn-secondary" id="loadStudentBtn">Load script</button>
+        </div>
+
+        <div id="markingGrid"></div>
+
+        <div class="field" style="max-width: 200px; margin-top: 1rem;">
+          <label for="theoryScoreInput">Theory score</label>
+          <input type="number" id="theoryScoreInput" />
+        </div>
+
+        <div style="margin-top: 1.25rem; display:flex; align-items:center; gap: 1.5rem;">
+          <div>
+            <div class="live-score" id="liveScore">—</div>
+            <div class="score-breakdown" id="liveScoreBreakdown"></div>
+          </div>
+          <button class="btn-primary" id="saveMarkBtn">Save score</button>
+        </div>
+        <div class="success-message" id="markSuccess" style="margin-top: 0.8rem;">Score saved and sent to gradebook.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || (role !== 'teacher' && role !== 'admin')) window.location.href = 'index.html';
+
+    if (role === 'admin') {
+      document.getElementById('sidebarNav').innerHTML = `
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html" class="active">Exam Marking</a>
+        <a href="#" id="logoutLink">Log out</a>
+      `;
+    }
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    let myId = null;
+    let keySelections = [];   // array of "A"/"B"/"C"/"D" for the answer key
+    let markSelections = [];  // array for the student being marked
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    const OPTIONS = ['A', 'B', 'C', 'D'];
+
+    function buildQuestionGrid(containerId, selectionsArray, count, onChange) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const row = document.createElement('div');
+        row.className = 'question-row';
+        row.innerHTML = `<span class="q-number">Q${i + 1}</span>` + OPTIONS.map(opt => `
+          <button type="button" class="option-btn" data-index="${i}" data-option="${opt}">${opt}</button>
+        `).join('');
+        container.appendChild(row);
+      }
+      container.querySelectorAll('.option-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.index);
+          const opt = btn.dataset.option;
+          selectionsArray[i] = opt;
+          container.querySelectorAll(`[data-index="${i}"]`).forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          if (onChange) onChange();
+        });
+      });
+    }
+
+    async function loadFilters() {
+      const me = await apiGet('/auth/me');
+      myId = me.id;
+
+      let classes, subjects;
+      if (role === 'teacher') {
+        const assignments = await apiGet(`/teacher-assignments?teacherId=${myId}`);
+        const seenClasses = new Map();
+        const seenSubjects = new Map();
+        assignments.forEach(a => { seenClasses.set(a.classId, a.class); seenSubjects.set(a.subjectId, a.subject); });
+        classes = [...seenClasses.values()];
+        subjects = [...seenSubjects.values()];
+      } else {
+        classes = await apiGet('/classes');
+        subjects = await apiGet('/subjects');
+      }
+
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('subjectSelect').innerHTML = subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+      const terms = await apiGet('/terms');
+      document.getElementById('termSelect').innerHTML = terms.map(t => `<option value="${t.name}" ${t.isCurrent ? 'selected' : ''}>${t.name}</option>`).join('');
+    }
+
+    async function loadAnswerKeySection() {
+      const classId = document.getElementById('classSelect').value;
+      const subjectId = document.getElementById('subjectSelect').value;
+      const term = document.getElementById('termSelect').value;
+      const count = parseInt(document.getElementById('questionCount').value) || 10;
+
+      keySelections = new Array(count).fill(null);
+      buildQuestionGrid('answerKeyGrid', keySelections, count);
+
+      document.getElementById('answerKeyStatus').textContent = 'Pick the correct option for each question, then save.';
+
+      // Load students for the marking dropdown too
+      const students = await apiGet(`/students?classId=${classId}`);
+      document.getElementById('studentSelect').innerHTML = students.map(s => `<option value="${s.id}">${s.firstName} ${s.lastName}</option>`).join('');
+    }
+
+    document.getElementById('loadBtn').addEventListener('click', loadAnswerKeySection);
+
+    document.getElementById('saveKeyBtn').addEventListener('click', async () => {
+      const classId = document.getElementById('classSelect').value;
+      const subjectId = document.getElementById('subjectSelect').value;
+      const term = document.getElementById('termSelect').value;
+
+      if (keySelections.some(v => !v)) {
+        alert('Please pick an option for every question first.');
+        return;
+      }
+
+      const result = await apiPost('/exams/answer-key', { classId, subjectId, term, answers: keySelections });
+      const successBox = document.getElementById('keySuccess');
+      successBox.textContent = result.ok ? 'Answer key saved.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 3000);
+    });
+
+    function updateLiveScore() {
+      const answered = markSelections.filter(v => v).length;
+      const theory = parseFloat(document.getElementById('theoryScoreInput').value) || 0;
+      document.getElementById('liveScore').textContent = answered === keySelections.length ? '—' : `${answered}/${keySelections.length} answered`;
+      document.getElementById('liveScoreBreakdown').textContent = `Theory entered: ${theory}. Objective auto-scores on save.`;
+    }
+
+    document.getElementById('loadStudentBtn').addEventListener('click', () => {
+      if (keySelections.length === 0) {
+        alert('Load and save an answer key first.');
+        return;
+      }
+      markSelections = new Array(keySelections.length).fill(null);
+      buildQuestionGrid('markingGrid', markSelections, keySelections.length, updateLiveScore);
+      updateLiveScore();
+    });
+
+    document.getElementById('theoryScoreInput').addEventListener('input', updateLiveScore);
+
+    document.getElementById('saveMarkBtn').addEventListener('click', async () => {
+      const classId = document.getElementById('classSelect').value;
+      const subjectId = document.getElementById('subjectSelect').value;
+      const term = document.getElementById('termSelect').value;
+      const studentId = document.getElementById('studentSelect').value;
+      const theoryScore = parseFloat(document.getElementById('theoryScoreInput').value) || 0;
+
+      if (markSelections.some(v => !v)) {
+        alert('Please mark every question first.');
+        return;
+      }
+
+      const result = await apiPost('/exams/mark', {
+        studentId, classId, subjectId, term,
+        objectiveAnswers: markSelections, theoryScore,
+      });
+
+      const successBox = document.getElementById('markSuccess');
+      if (result.ok) {
+        document.getElementById('liveScore').textContent = result.data.totalScore;
+        document.getElementById('liveScoreBreakdown').textContent = `Objective: ${result.data.objectiveScore} · Theory: ${result.data.theoryScore}`;
+        successBox.textContent = 'Score saved and sent to gradebook.';
+      } else {
+        successBox.textContent = result.data.error || 'Something went wrong.';
+      }
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 3000);
+    });
+
+    (async function init() {
+      await loadFilters();
+    })();
+  </script>
+</body>
+</html>
