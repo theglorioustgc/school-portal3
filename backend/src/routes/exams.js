@@ -340,4 +340,25 @@ router.get('/exams/results', requireAuth, async (req, res) => {
      });
      res.json(script);
    });
+// ------------------------------------------------------------------
+   // GET /exams/report-card/terms?studentId=xxx
+   // Lists only the terms that actually have a PUBLISHED result for
+   // this student — powers a dropdown instead of free-text typing.
+   // ------------------------------------------------------------------
+   router.get('/exams/report-card/terms', requireAuth, async (req, res) => {
+     const { studentId } = req.query;
+     if (!studentId) return res.status(400).json({ error: 'studentId query param is required' });
+
+     if (req.user.role === 'student' && req.user.id !== studentId) {
+       return res.status(403).json({ error: 'You can only view your own terms' });
+     }
+
+     const publications = await prisma.resultPublication.findMany({
+       where: { studentId, status: 'published' },
+       select: { term: true },
+       orderBy: { term: 'desc' },
+     });
+
+     res.json(publications.map((p) => p.term));
+   });
 module.exports = router;
