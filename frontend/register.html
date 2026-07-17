@@ -109,6 +109,22 @@
           <p class="text-slate" style="margin-top: 0.8rem; font-size: 0.82rem;">
             Share these with the parent or teacher — they'll be asked to change the password on first login.
           </p>
+          <div class="card" style="max-width: 460px; margin-top: 1.5rem;">
+         <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Transfer to alumni</h2>
+         <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">
+           Removes a student from active rosters without deleting their records. Fully reversible via the database if done by mistake.
+         </p>
+         <div class="field">
+           <label for="alumniStudentSelect">Student</label>
+           <select id="alumniStudentSelect"></select>
+         </div>
+         <div class="field">
+           <label for="alumniReason">Reason (optional)</label>
+           <input type="text" id="alumniReason" placeholder="e.g. Graduated, Relocated" />
+         </div>
+         <button class="btn-secondary" id="transferAlumniBtn">Transfer to alumni</button>
+         <div class="success-message" id="alumniSuccess" style="margin-top: 0.8rem;">Transferred.</div>
+       </div>
         </div>
       </div>
     </div>
@@ -156,6 +172,35 @@
       select.innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     }
     loadClasses();
+    async function loadAlumniStudentList() {
+     const res = await fetch(`${API_BASE_URL}/students`, { headers: { Authorization: `Bearer ${token}` } });
+     const students = await res.json();
+     document.getElementById('alumniStudentSelect').innerHTML = students.map(s => `<option value="${s.id}">${s.firstName} ${s.lastName} (${s.studentId})</option>`).join('');
+   }
+   loadAlumniStudentList();
+
+   document.getElementById('transferAlumniBtn').addEventListener('click', async () => {
+     const studentId = document.getElementById('alumniStudentSelect').value;
+     const reason = document.getElementById('alumniReason').value.trim();
+     if (!studentId) return;
+
+     const res = await fetch(`${API_BASE_URL}/students/${studentId}/transfer-alumni`, {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+       body: JSON.stringify({ reason }),
+     });
+     const data = await res.json();
+
+     const successBox = document.getElementById('alumniSuccess');
+     successBox.textContent = res.ok ? `${data.firstName} ${data.lastName} transferred to alumni.` : (data.error || 'Something went wrong.');
+     successBox.classList.add('visible');
+     setTimeout(() => successBox.classList.remove('visible'), 3000);
+
+     if (res.ok) {
+       document.getElementById('alumniReason').value = '';
+       loadAlumniStudentList();
+     }
+   });
 
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();
