@@ -85,13 +85,17 @@
           <div id="assignmentList"><p class="empty-state">Loading…</p></div>
         </div>
 
-        <div class="card">
-          <h2>Announcements</h2>
-          <div id="announcementList"><p class="empty-state">Loading…</p></div>
-        </div>
-      </div>
-    </div>
-  </div>
+       <div class="card">
+         <h2>Announcements</h2>
+         <div id="announcementList"><p class="empty-state">Loading…</p></div>
+       </div>
+
+       <div class="card">
+         <h2>School news</h2>
+         <div id="contentList"><p class="empty-state">Loading…</p></div>
+       </div>
+     </div>
+   </div>
 
   <script src="config.js"></script>
   <script>
@@ -167,7 +171,24 @@
        document.getElementById('assignmentList').innerHTML = '<p class="empty-state">Could not load assignments.</p>';
      }
    }
-
+async function loadContent() {
+     try {
+       const posts = await apiGet('/content');
+       const container = document.getElementById('contentList');
+       if (posts.length === 0) {
+         container.innerHTML = '<p class="empty-state">No news right now.</p>';
+         return;
+       }
+       container.innerHTML = posts.slice(0, 5).map(p => `
+         <div class="announcement-row">
+           <div>${p.title}</div>
+           <div class="due">${p.body}</div>
+         </div>
+       `).join('');
+     } catch (err) {
+       document.getElementById('contentList').innerHTML = '<p class="empty-state">Could not load news.</p>';
+     }
+   }
    async function loadAnnouncements() {
      try {
        const list = await apiGet('/announcements');
@@ -207,6 +228,7 @@
      loadTimetable();
      loadAssignments();
      loadAnnouncements();
+     loadContent();
      loadAttendance();
    })();
   </script>
