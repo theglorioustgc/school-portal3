@@ -11,10 +11,12 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/settings', requireAuth, async (req, res) => {
-  const config = await prisma.schoolConfig.findFirst();
-  res.json(config || null);
-});
+// Public — no login required, so the homepage and application
+   // form can show the school's name/logo before anyone signs in.
+   router.get('/settings', async (req, res) => {
+     const config = await prisma.schoolConfig.findFirst();
+     res.json(config || null);
+   });
 
 router.put('/settings', requireAuth, requireRole('admin'), async (req, res) => {
   const {
