@@ -122,11 +122,27 @@ router.post('/content', requireAuth, requireRole('admin'), async (req, res) => {
 });
 
 // Students/teachers see only published posts; admin sees everything
-router.get('/content', requireAuth, async (req, res) => {
-  const where = req.user.role === 'admin' ? {} : { published: true };
-  const posts = await prisma.contentPost.findMany({ where, orderBy: { createdAt: 'desc' } });
-  res.json(posts);
-});
+// Public — no login required, so the homepage can show real news.
+   // Logged-in admin still sees everything (including unpublished);
+   // everyone else (including logged-out visitors) sees published only.
+   router.get('/content', async (req, res) => {
+     const authHeader = req.headers.authorization;
+     let isAdmin = false;
+
+     if (authHeader) {
+       try {
+         const jwt = require('jsonwebtoken');
+         const payload = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+         isAdmin = payload.role === 'admin';
+       } catch (err) {
+         // invalid/expired token — just treat as a logged-out visitor
+       }
+     }
+
+     const where = isAdmin ? {} : { published: true };
+     const posts = await prisma.contentPost.findMany({ where, orderBy: { createdAt: 'desc' } });
+     res.json(posts);
+   });
 
 router.patch('/content/:id/publish', requireAuth, requireRole('admin'), async (req, res) => {
   const { published } = req.body;
