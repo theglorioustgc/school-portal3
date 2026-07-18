@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apply — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem 1rem; }
+    .apply-card {
+      max-width: 480px; width: 100%; background: var(--paper-raised);
+      border: 1px solid var(--line); border-radius: 16px; padding: 2.5rem;
+    }
+    .apply-card h1 { font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .apply-card p.intro { font-size: 0.9rem; color: var(--slate); margin-bottom: 1.75rem; }
+    .confirmation {
+      text-align: center; padding: 2rem 0;
+    }
+    .confirmation .checkmark {
+      width: 56px; height: 56px; border-radius: 50%; background: rgba(47,143,91,0.12);
+      color: var(--success); display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; margin: 0 auto 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="apply-card">
+    <div class="eyebrow">Admission</div>
+    <h1>Register your child</h1>
+    <p class="intro">Submit your details below — the school will review this and contact you with next steps.</p>
+
+    <div class="error-message" id="errorBox"></div>
+
+    <form id="applyForm">
+      <div class="field">
+        <label for="firstName">Child's first name</label>
+        <input type="text" id="firstName" required />
+      </div>
+      <div class="field">
+        <label for="lastName">Child's last name</label>
+        <input type="text" id="lastName" required />
+      </div>
+      <div class="field">
+        <label for="dob">Date of birth (optional)</label>
+        <input type="date" id="dob" />
+      </div>
+      <div class="field">
+        <label for="desiredClass">Desired class (optional)</label>
+        <select id="desiredClass"><option value="">— not sure —</option></select>
+      </div>
+      <div class="field">
+        <label for="parentName">Your full name</label>
+        <input type="text" id="parentName" required />
+      </div>
+      <div class="field">
+        <label for="parentEmail">Your email</label>
+        <input type="email" id="parentEmail" required />
+      </div>
+      <div class="field">
+        <label for="parentPhone">Your phone (optional)</label>
+        <input type="text" id="parentPhone" />
+      </div>
+      <button type="submit" class="btn-primary" id="submitBtn" style="width:100%;">Submit application</button>
+    </form>
+
+    <div class="confirmation" id="confirmationBox" style="display:none;">
+      <div class="checkmark">✓</div>
+      <h1 style="font-size: 1.3rem;">Application received</h1>
+      <p class="text-slate" style="font-size: 0.9rem; margin-top: 0.5rem;">The school will contact you once it has been reviewed.</p>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    // Classes are public read info here, no login needed for this GET
+    // since /classes only requires requireAuth for admin-only WRITES —
+    // but the list itself is behind requireAuth, so we fall back
+    // gracefully if it fails (form still works without the dropdown filled).
+    async function loadClasses() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/classes`);
+        if (!res.ok) return;
+        const classes = await res.json();
+        const select = document.getElementById('desiredClass');
+        classes.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          select.appendChild(opt);
+        });
+      } catch (err) {
+        // silently ignore — class picking is optional
+      }
+    }
+    loadClasses();
+
+    document.getElementById('applyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('errorBox');
+      errorBox.classList.remove('visible');
+
+      const body = {
+        firstName: document.getElementById('firstName').value.trim(),
+        lastName: document.getElementById('lastName').value.trim(),
+        dob: document.getElementById('dob').value || undefined,
+        desiredClassId: document.getElementById('desiredClass').value || undefined,
+        parentName: document.getElementById('parentName').value.trim(),
+        parentEmail: document.getElementById('parentEmail').value.trim(),
+        parentPhone: document.getElementById('parentPhone').value.trim() || undefined,
+      };
+
+      try {
+        const res = await fetch(`${API_BASE_URL}/public/register-request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorBox.textContent = data.error || 'Something went wrong.';
+          errorBox.classList.add('visible');
+          return;
+        }
+
+        document.getElementById('applyForm').style.display = 'none';
+        document.getElementById('confirmationBox').style.display = 'block';
+      } catch (err) {
+        errorBox.textContent = 'Could not reach the server.';
+        errorBox.classList.add('visible');
+      }
+    });
+  </script>
+</body>
+</html>
