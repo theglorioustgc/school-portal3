@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Events — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .layout { display: grid; grid-template-columns: 380px 1fr; gap: 1.5rem; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .event-item { border-bottom: 1px solid var(--line); padding: 0.9rem 0; }
+    .event-item:last-child { border-bottom: none; }
+    .event-item h3 { font-size: 0.95rem; margin-bottom: 0.2rem; }
+    .event-item .meta { font-size: 0.75rem; color: var(--slate); }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html">Grading Scheme</a>
+        <a href="settings.html">Settings</a>
+        <a href="flags.html">Flags</a>
+        <a href="documents.html">Documents</a>
+        <a href="content.html">Content</a>
+        <a href="events.html" class="active">Events</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">School calendar</h1>
+
+      <div class="layout">
+        <div class="card">
+          <div class="section-title" style="font-size:1.05rem; margin-bottom:1rem;">Create event</div>
+          <div class="field">
+            <label for="title">Title</label>
+            <input type="text" id="title" />
+          </div>
+          <div class="field">
+            <label for="description">Description (optional)</label>
+            <textarea id="description" rows="3"></textarea>
+          </div>
+          <div class="field">
+            <label for="eventDate">Date</label>
+            <input type="date" id="eventDate" />
+          </div>
+          <div class="field">
+            <label for="audience">Audience</label>
+            <select id="audience">
+              <option value="all">Everyone</option>
+              <option value="teachers">Teachers only</option>
+              <option value="students">Students only</option>
+              <option value="class">One class</option>
+            </select>
+          </div>
+          <div class="field" id="classField" style="display:none;">
+            <label for="classSelect">Class</label>
+            <select id="classSelect"></select>
+          </div>
+          <button class="btn-primary" id="createBtn">Create event</button>
+          <button class="btn-secondary" id="sendRemindersBtn" style="margin-top: 0.6rem; width: 100%;">Send tomorrow's reminders now</button>
+          <div class="success-message" id="successBox" style="margin-top: 0.8rem;">Saved.</div>
+        </div>
+
+        <div class="card">
+          <div class="section-title" style="font-size:1.05rem; margin-bottom:0.5rem;">Upcoming events</div>
+          <div id="eventList"><p class="empty-state">Loading…</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body || {}),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    const audienceSelect = document.getElementById('audience');
+    const classField = document.getElementById('classField');
+    audienceSelect.addEventListener('change', () => {
+      classField.style.display = audienceSelect.value === 'class' ? 'block' : 'none';
+    });
+
+    async function loadClasses() {
+      const classes = await apiGet('/classes');
+      document.getElementById('classSelect').innerHTML = classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+
+    async function loadEvents() {
+      const events = await apiGet('/events');
+      const container = document.getElementById('eventList');
+      if (events.length === 0) {
+        container.innerHTML = '<p class="empty-state">No events yet.</p>';
+        return;
+      }
+      container.innerHTML = events.map(e => `
+        <div class="event-item">
+          <h3>${e.title}</h3>
+          <div class="meta">${new Date(e.eventDate).toLocaleDateString()} · ${e.audience}${e.reminderSent ? ' · reminder sent' : ''}</div>
+          ${e.description ? `<p class="text-slate" style="font-size:0.85rem; margin-top:0.3rem;">${e.description}</p>` : ''}
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('createBtn').addEventListener('click', async () => {
+      const title = document.getElementById('title').value.trim();
+      const description = document.getElementById('description').value.trim();
+      const eventDate = document.getElementById('eventDate').value;
+      const audience = audienceSelect.value;
+      if (!title || !eventDate) return;
+
+      const body = { title, description, eventDate, audience };
+      if (audience === 'class') body.classId = document.getElementById('classSelect').value;
+
+      const result = await apiPost('/events', body);
+      const successBox = document.getElementById('successBox');
+      successBox.textContent = result.ok ? 'Event created.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 2500);
+
+      if (result.ok) {
+        document.getElementById('title').value = '';
+        document.getElementById('description').value = '';
+        document.getElementById('eventDate').value = '';
+        loadEvents();
+      }
+    });
+
+    document.getElementById('sendRemindersBtn').addEventListener('click', async () => {
+      const result = await apiPost('/events/send-reminders');
+      const successBox = document.getElementById('successBox');
+      successBox.textContent = result.ok
+        ? `${result.data.eventsProcessed} event(s) processed, ${result.data.alertsSent} alert(s) sent.`
+        : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 3500);
+      loadEvents();
+    });
+
+    (async function init() {
+      await loadClasses();
+      await loadEvents();
+    })();
+  </script>
+</body>
+</html>
