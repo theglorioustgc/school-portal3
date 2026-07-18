@@ -77,6 +77,11 @@
         <div class="card full-width-card">
           <h2>Attendance &amp; assignments</h2>
           <p class="text-slate" style="font-size: 0.88rem;">Pick a class above to mark attendance or post an assignment.</p>
+          
+          <div class="card full-width-card">
+         <h2>Upcoming events</h2>
+         <div id="eventList"><p class="empty-state">Loading…</p></div>
+       </div>
 
           <div class="panel" id="attendancePanel">
             <div class="field" style="max-width: 220px;">
@@ -268,12 +273,30 @@
       successBox.classList.add('visible');
       setTimeout(() => successBox.classList.remove('visible'), 2500);
     });
-
-    (async function init() {
-      await loadProfile();
-      loadSchedule();
-      loadClasses();
-    })();
+async function loadEvents() {
+     try {
+       const events = await apiGet('/events');
+       const container = document.getElementById('eventList');
+       if (events.length === 0) {
+         container.innerHTML = '<p class="empty-state">No upcoming events.</p>';
+         return;
+       }
+       container.innerHTML = events.slice(0, 5).map(e => `
+         <div class="period-row">
+           <span>${e.title}</span>
+           <span class="period-time">${new Date(e.eventDate).toLocaleDateString()}</span>
+         </div>
+       `).join('');
+     } catch (err) {
+       document.getElementById('eventList').innerHTML = '<p class="empty-state">Could not load events.</p>';
+     }
+   }
+   (async function init() {
+     await loadProfile();
+     loadSchedule();
+     loadClasses();
+     loadEvents();
+   })();
   </script>
 </body>
 </html>
