@@ -108,6 +108,7 @@ model AdminUser {
   feePaymentsMarked StudentFeePayment[]
   documentsUploaded Document[]
   contentPosted   ContentPost[]
+  registrationRequestsReviewed RegistrationRequest[]
 }
 
 model BursarUser {
@@ -134,6 +135,7 @@ model SchoolClass {
   answerKeys  ExamAnswerKey[]
   examScripts ExamScript[]
   feeTypeLinks FeeTypeClass[]
+  registrationRequests RegistrationRequest[]
 }
 
 model Subject {
@@ -415,17 +417,37 @@ model GradeBoundary {
   createdAt   DateTime @default(now())
 }
 
-// ----------------------------------------------------------
-// TERMS — the authoritative list. Every other module still
-// just stores "term" as a plain string (no relations needed),
-// but every dropdown in the app now pulls from this list
-// instead of free-typed text, so it can never drift.
-// ----------------------------------------------------------
 model Term {
   id          String   @id @default(uuid())
-  name        String   @unique   // e.g. "Term 2, 2026"
+  name        String   @unique
   isCurrent   Boolean  @default(false)
   startDate   DateTime?
   endDate     DateTime?
   createdAt   DateTime @default(now())
+}
+
+// ----------------------------------------------------------
+// REGISTRATION REQUESTS — the public, no-login submission from
+// a parent. Sits in a review queue until an admin approves it,
+// at which point a real Student account + login credentials are
+// created — same mechanism as the existing admin-registration
+// endpoint, just triggered from an approval instead of a form.
+// ----------------------------------------------------------
+model RegistrationRequest {
+  id                String   @id @default(uuid())
+  firstName         String
+  lastName          String
+  dob               DateTime?
+  desiredClassId    String?
+  desiredClass      SchoolClass? @relation(fields: [desiredClassId], references: [id])
+  parentName        String
+  parentEmail       String
+  parentPhone       String?
+  status            String   @default("pending") // pending | approved | rejected
+  reviewNote        String?
+  reviewedById      String?
+  reviewedBy        AdminUser? @relation(fields: [reviewedById], references: [id])
+  approvedStudentId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
