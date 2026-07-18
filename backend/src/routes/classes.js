@@ -16,10 +16,12 @@ const router = express.Router();
 // ------------------------------------------------------------------
 
 // List all classes
-router.get('/classes', requireAuth, async (req, res) => {
-  const classes = await prisma.schoolClass.findMany({ orderBy: { name: 'asc' } });
-  res.json(classes);
-});
+// List all classes — public, no login required, so the public
+   // application form (apply.html) can populate its class dropdown.
+   router.get('/classes', async (req, res) => {
+     const classes = await prisma.schoolClass.findMany({ orderBy: { name: 'asc' } });
+     res.json(classes);
+   });
 
 // Create a class
 router.post('/classes', requireAuth, requireRole('admin'), async (req, res) => {
