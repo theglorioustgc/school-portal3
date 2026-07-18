@@ -20,8 +20,9 @@ const examsRoutes = require('./routes/exams');
 const adminRoutes = require('./routes/admin');
   const flagsRoutes = require('./routes/flags');
   const gradingSchemeRoutes = require('./routes/gradingScheme');
-   const termsRoutes = require('./routes/terms');
+  const termsRoutes = require('./routes/terms');
    const settingsRoutes = require('./routes/settings');
+   const registrationRequestsRoutes = require('./routes/registrationRequests');
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use('/', flagsRoutes);
  app.use('/', gradingSchemeRoutes);
    app.use('/', termsRoutes);
    app.use('/', settingsRoutes);
+app.use('/', registrationRequestsRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
