@@ -152,7 +152,7 @@
      }
    }
 
-   async function loadAssignments() {
+  async function loadAssignments() {
      try {
        if (!myClassId) { document.getElementById('assignmentList').innerHTML = '<p class="empty-state">No class assigned yet.</p>'; return; }
        const assignments = await apiGet(`/assignments?classId=${myClassId}`);
@@ -162,11 +162,43 @@
          return;
        }
        container.innerHTML = assignments.slice(0, 6).map(a => `
-         <div class="assignment-row">
+         <div class="assignment-row" data-assignment="${a.id}">
            <div>${a.title}</div>
            <div class="due">${a.subject.name} · due ${new Date(a.dueDate).toLocaleDateString()}</div>
+           <div style="margin-top:0.5rem; display:flex; gap:0.4rem;">
+             <input type="text" class="submit-link-input" placeholder="Paste your submission link" style="flex:1; padding:0.4rem 0.6rem; border:1.5px solid var(--line); border-radius:7px; font-size:0.8rem;" />
+             <button class="btn-secondary submit-link-btn" data-id="${a.id}" style="font-size:0.78rem; padding:0.4rem 0.7rem;">Submit</button>
+           </div>
+           <div class="text-slate submit-status" style="font-size:0.75rem; margin-top:0.3rem;"></div>
          </div>
        `).join('');
+
+       container.querySelectorAll('.submit-link-btn').forEach(btn => {
+         btn.addEventListener('click', async () => {
+           const row = btn.closest('.assignment-row');
+           const input = row.querySelector('.submit-link-input');
+           const status = row.querySelector('.submit-status');
+           const linkUrl = input.value.trim();
+           if (!linkUrl) return;
+
+           try {
+             const res = await fetch(`${API_BASE_URL}/assignments/${btn.dataset.id}/submit`, {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+               body: JSON.stringify({ linkUrl }),
+             });
+             if (res.ok) {
+               status.textContent = 'Submitted ✓';
+               status.style.color = 'var(--success)';
+             } else {
+               const data = await res.json();
+               status.textContent = data.error || 'Could not submit.';
+             }
+           } catch (err) {
+             status.textContent = 'Could not reach the server.';
+           }
+         });
+       });
      } catch (err) {
        document.getElementById('assignmentList').innerHTML = '<p class="empty-state">Could not load assignments.</p>';
      }
