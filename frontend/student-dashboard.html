@@ -90,9 +90,14 @@
          <div id="announcementList"><p class="empty-state">Loading…</p></div>
        </div>
 
-       <div class="card">
+      <div class="card">
          <h2>School news</h2>
          <div id="contentList"><p class="empty-state">Loading…</p></div>
+       </div>
+
+       <div class="card">
+         <h2>Upcoming events</h2>
+         <div id="eventList"><p class="empty-state">Loading…</p></div>
        </div>
      </div>
    </div>
@@ -203,6 +208,24 @@
        document.getElementById('assignmentList').innerHTML = '<p class="empty-state">Could not load assignments.</p>';
      }
    }
+    async function loadEvents() {
+     try {
+       const events = await apiGet('/events');
+       const container = document.getElementById('eventList');
+       if (events.length === 0) {
+         container.innerHTML = '<p class="empty-state">No upcoming events.</p>';
+         return;
+       }
+       container.innerHTML = events.slice(0, 5).map(e => `
+         <div class="announcement-row">
+           <div>${e.title}</div>
+           <div class="due">${new Date(e.eventDate).toLocaleDateString()}${e.description ? ' · ' + e.description : ''}</div>
+         </div>
+       `).join('');
+     } catch (err) {
+       document.getElementById('eventList').innerHTML = '<p class="empty-state">Could not load events.</p>';
+     }
+   }
 async function loadContent() {
      try {
        const posts = await apiGet('/content');
@@ -261,6 +284,7 @@ async function loadContent() {
      loadAssignments();
      loadAnnouncements();
      loadContent();
+     loadEvents();
      loadAttendance();
    })();
   </script>
