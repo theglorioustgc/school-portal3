@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registration Requests — School Portal</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .request-card {
+      border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem;
+    }
+    .request-card .name { font-size: 1.05rem; font-weight: 600; }
+    .request-card .meta { font-size: 0.85rem; color: var(--slate); margin: 0.4rem 0 1rem; }
+    .request-card .meta div { margin-bottom: 0.15rem; }
+    .action-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    .action-row select { padding: 0.5rem 0.7rem; border: 1.5px solid var(--line); border-radius: 8px; }
+    .status-pill { font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 100px; }
+    .status-pending { background: rgba(232,169,60,0.18); color: #8a6110; }
+    .status-approved { background: rgba(47,143,91,0.12); color: var(--success); }
+    .status-rejected { background: rgba(193,68,60,0.1); color: var(--error); }
+    .credential-box {
+      background: rgba(47,143,91,0.06); border: 1px solid rgba(47,143,91,0.25);
+      border-radius: 10px; padding: 0.9rem; margin-top: 0.8rem; font-family: var(--font-mono); font-size: 0.85rem;
+    }
+    .empty-state { color: var(--slate); font-size: 0.88rem; padding: 0.5rem 0; }
+  </style>
+</head>
+<body>
+
+  <div class="app-shell">
+    <div class="app-sidebar">
+      <h2>School Portal</h2>
+      <nav>
+        <a href="admin-dashboard.html">Dashboard</a>
+        <a href="register.html">Register</a>
+        <a href="classes.html">Classes</a>
+        <a href="announcements.html">Announcements</a>
+        <a href="fees.html">Fees</a>
+        <a href="report-card.html">Report Cards</a>
+        <a href="gradebook.html">Gradebook</a>
+        <a href="exam-marking.html">Exam Marking</a>
+        <a href="compile-results.html">Compile Results</a>
+        <a href="grading-scheme.html">Grading Scheme</a>
+        <a href="settings.html">Settings</a>
+        <a href="flags.html">Flags</a>
+        <a href="documents.html">Documents</a>
+        <a href="content.html">Content</a>
+        <a href="events.html">Events</a>
+        <a href="registration-requests.html" class="active">Applications</a>
+        <a href="#" id="logoutLink">Log out</a>
+      </nav>
+    </div>
+
+    <div class="app-main">
+      <div class="eyebrow">Admin</div>
+      <h1 style="margin-bottom: 1.5rem;">Registration applications</h1>
+
+      <div style="margin-bottom: 1.25rem;">
+        <select id="statusFilter">
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+          <option value="">All</option>
+        </select>
+      </div>
+
+      <div id="requestList"><p class="empty-state">Loading…</p></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
+    if (!token || role !== 'admin') window.location.href = 'index.html';
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      window.location.href = 'index.html';
+    });
+
+    async function apiGet(path) {
+      const res = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      return res.json();
+    }
+    async function apiPost(path, body) {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body || {}),
+      });
+      return { ok: res.ok, data: await res.json() };
+    }
+
+    let classesList = [];
+
+    async function loadClasses() {
+      classesList = await apiGet('/classes');
+    }
+
+    async function loadRequests() {
+      const status = document.getElementById('statusFilter').value;
+      const requests = await apiGet(`/registration-requests${status ? `?status=${status}` : ''}`);
+      const container = document.getElementById('requestList');
+
+      if (requests.length === 0) {
+        container.innerHTML = '<p class="empty-state">No requests here.</p>';
+        return;
+      }
+
+      container.innerHTML = requests.map(r => `
+        <div class="request-card">
+          <div class="name">${r.firstName} ${r.lastName} <span class="status-pill status-${r.status}">${r.status}</span></div>
+          <div class="meta">
+            <div>Parent: ${r.parentName} · ${r.parentEmail}${r.parentPhone ? ' · ' + r.parentPhone : ''}</div>
+            <div>Desired class: ${r.desiredClass?.name || 'not specified'}</div>
+            <div>Submitted: ${new Date(r.createdAt).toLocaleDateString()}</div>
+          </div>
+          ${r.status === 'pending' ? `
+            <div class="action-row">
+              <select class="class-select" data-id="${r.id}">
+                <option value="">${r.desiredClass?.name ? 'Use desired class: ' + r.desiredClass.name : 'Pick a class'}</option>
+                ${classesList.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+              </select>
+              <button class="btn-primary approve-btn" data-id="${r.id}" style="font-size:0.85rem; padding:0.5rem 1rem;">Approve</button>
+              <button class="btn-secondary reject-btn" data-id="${r.id}" style="font-size:0.85rem; padding:0.5rem 1rem;">Reject</button>
+            </div>
+            <div class="credential-result" id="cred-${r.id}"></div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.approve-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const classId = document.querySelector(`.class-select[data-id="${id}"]`).value;
+          btn.disabled = true;
+          btn.textContent = 'Approving…';
+
+          const result = await apiPost(`/registration-requests/${id}/approve`, {
+            schoolCode: 'GHS',
+            classId: classId || undefined,
+          });
+
+          if (result.ok) {
+            document.getElementById(`cred-${id}`).innerHTML = `
+              <div class="credential-box">
+                Student ID: <strong>${result.data.studentId}</strong><br/>
+                Temp password: <strong>${result.data.tempPassword}</strong>
+              </div>
+            `;
+            setTimeout(loadRequests, 2000);
+          } else {
+            alert(result.data.error || 'Could not approve.');
+            btn.disabled = false;
+            btn.textContent = 'Approve';
+          }
+        });
+      });
+
+      document.querySelectorAll('.reject-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const reviewNote = prompt('Reason for rejecting (optional):') || '';
+          await apiPost(`/registration-requests/${btn.dataset.id}/reject`, { reviewNote });
+          loadRequests();
+        });
+      });
+    }
+
+    document.getElementById('statusFilter').addEventListener('change', loadRequests);
+
+    (async function init() {
+      await loadClasses();
+      await loadRequests();
+    })();
+  </script>
+</body>
+</html>
