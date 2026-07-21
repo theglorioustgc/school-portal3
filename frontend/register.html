@@ -131,16 +131,17 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="theme.js"></script>
   <script>
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
-    if (!token || role !== 'admin') window.location.href = 'index.html';
+    if (!token || role !== 'admin') window.location.href = 'login.html';
 
     document.getElementById('logoutLink').addEventListener('click', (e) => {
       e.preventDefault();
       localStorage.removeItem('token');
       localStorage.removeItem('role');
-      window.location.href = 'index.html';
+      window.location.href = 'login.html';
     });
 
     let mode = 'student';

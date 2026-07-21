@@ -21,6 +21,7 @@ const router = express.Router();
 router.put('/settings', requireAuth, requireRole('admin'), async (req, res) => {
   const {
     schoolName, logoUrl, contactEmail, contactPhone, schoolCode,
+    primaryColor, secondaryColor,
     attendanceAbsenceThreshold, attendanceRateThreshold,
     performanceDeclineThreshold, performanceLowThreshold,
   } = req.body;
@@ -29,6 +30,7 @@ router.put('/settings', requireAuth, requireRole('admin'), async (req, res) => {
 
   const data = {
     schoolName, logoUrl, contactEmail, contactPhone,
+    primaryColor, secondaryColor,
     attendanceAbsenceThreshold, attendanceRateThreshold,
     performanceDeclineThreshold, performanceLowThreshold,
   };

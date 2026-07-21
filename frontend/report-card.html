@@ -143,10 +143,11 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="theme.js"></script>
   <script>
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
-    if (!token) window.location.href = 'index.html';
+    if (!token) window.location.href = 'login.html';
 
     const navByRole = {
       admin: `<a href="admin-dashboard.html">Dashboard</a><a href="register.html">Register</a><a href="classes.html">Classes</a><a href="announcements.html">Announcements</a><a href="fees.html">Fees</a><a href="report-card.html" class="active">Report Cards</a><a href="#" id="logoutLink">Log out</a>`,
@@ -159,7 +160,7 @@
       e.preventDefault();
       localStorage.removeItem('token');
       localStorage.removeItem('role');
-      window.location.href = 'index.html';
+      window.location.href = 'login.html';
     });
 
     async function apiGet(path) {

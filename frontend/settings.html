@@ -69,6 +69,23 @@
         </div>
 
         <div class="card">
+          <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Color scheme</h2>
+          <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">Changes here apply across the entire site — every page, instantly, no code editing needed.</p>
+          <div class="max-grid">
+            <div class="field">
+              <label for="primaryColor">Primary color</label>
+              <input type="color" id="primaryColor" style="height: 42px; padding: 0.2rem;" />
+            </div>
+            <div class="field">
+              <label for="secondaryColor">Accent color</label>
+              <input type="color" id="secondaryColor" style="height: 42px; padding: 0.2rem;" />
+            </div>
+          </div>
+          <button class="btn-primary" id="saveColorsBtn">Save color scheme</button>
+          <div class="success-message" id="colorSuccess" style="margin-top: 0.8rem;">Saved. Refresh other pages to see it everywhere.</div>
+        </div>
+
+        <div class="card">
           <h2 style="font-size: 1.05rem; margin-bottom: 1rem;">Early-warning thresholds</h2>
           <p class="text-slate" style="font-size: 0.85rem; margin-bottom: 1rem;">Used by the attendance and performance flag checks.</p>
           <div class="max-grid">
@@ -97,16 +114,17 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="theme.js"></script>
   <script>
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
-    if (!token || role !== 'admin') window.location.href = 'index.html';
+    if (!token || role !== 'admin') window.location.href = 'login.html';
 
     document.getElementById('logoutLink').addEventListener('click', (e) => {
       e.preventDefault();
       localStorage.removeItem('token');
       localStorage.removeItem('role');
-      window.location.href = 'index.html';
+      window.location.href = 'login.html';
     });
 
     async function apiGet(path) {
@@ -131,6 +149,8 @@
       document.getElementById('logoUrl').value = config.logoUrl || '';
       document.getElementById('contactEmail').value = config.contactEmail || '';
       document.getElementById('contactPhone').value = config.contactPhone || '';
+      document.getElementById('primaryColor').value = config.primaryColor || '#1E3A8A';
+      document.getElementById('secondaryColor').value = config.secondaryColor || '#F59E0B';
       document.getElementById('attendanceAbsenceThreshold').value = config.attendanceAbsenceThreshold;
       document.getElementById('attendanceRateThreshold').value = config.attendanceRateThreshold;
       document.getElementById('performanceDeclineThreshold').value = config.performanceDeclineThreshold;
@@ -157,6 +177,19 @@
       successBox.classList.add('visible');
       setTimeout(() => successBox.classList.remove('visible'), 2500);
       if (result.ok) loadSettings();
+    });
+
+    document.getElementById('saveColorsBtn').addEventListener('click', async () => {
+      const body = {
+        primaryColor: document.getElementById('primaryColor').value,
+        secondaryColor: document.getElementById('secondaryColor').value,
+      };
+      const result = await apiPut('/settings', body);
+      const successBox = document.getElementById('colorSuccess');
+      successBox.textContent = result.ok ? 'Saved. Refresh other pages to see it everywhere.' : (result.data.error || 'Something went wrong.');
+      successBox.classList.add('visible');
+      setTimeout(() => successBox.classList.remove('visible'), 3000);
+      if (result.ok) applyTheme();
     });
 
     document.getElementById('saveThresholdsBtn').addEventListener('click', async () => {
