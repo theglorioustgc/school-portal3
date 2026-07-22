@@ -244,11 +244,11 @@
      try {
        const terms = await apiGet(`/exams/report-card/terms?studentId=${studentId}`);
        if (terms.length === 0) {
-         termSelect.innerHTML = '<option value="">No published results yet</option>';
+         termSelect.innerHTML = '<option value="">No results yet</option>';
          return null;
        }
-       termSelect.innerHTML = terms.map(t => `<option value="${t}">${t}</option>`).join('');
-       return terms[0];
+       termSelect.innerHTML = terms.map(t => `<option value="${t.term}">${t.term}${t.status === 'pending' ? ' (not published)' : ''}</option>`).join('');
+       return terms[0].term;
      } catch (err) {
        termSelect.innerHTML = '<option value="">Could not load terms</option>';
        return null;
@@ -265,7 +265,7 @@
        const studentId = studentSelect.value;
        const firstTerm = await loadTermsFor(studentId);
        if (firstTerm) loadForStudent(studentId, firstTerm);
-       else document.getElementById('reportContainer').innerHTML = '<p class="text-slate" style="text-align:center;">No published results yet for this student.</p>';
+       else document.getElementById('reportContainer').innerHTML = '<p class="text-slate" style="text-align:center;">No results yet — compile this class on the Compile Results page first.</p>';
      }
 
      studentSelect.addEventListener('change', refreshTermsAndLoad);
