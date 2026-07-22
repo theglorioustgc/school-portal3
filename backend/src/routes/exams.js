@@ -342,8 +342,10 @@ router.get('/exams/results', requireAuth, async (req, res) => {
    });
 // ------------------------------------------------------------------
    // GET /exams/report-card/terms?studentId=xxx
-   // Lists only the terms that actually have a PUBLISHED result for
-   // this student — powers a dropdown instead of free-text typing.
+   // Students only see terms that have been PUBLISHED (same gate as
+   // the report card itself). Admin sees every term that's been
+   // compiled at all, published or not, so they can watch a result
+   // build up before deciding to release it.
    // ------------------------------------------------------------------
    router.get('/exams/report-card/terms', requireAuth, async (req, res) => {
      const { studentId } = req.query;
@@ -353,12 +355,16 @@ router.get('/exams/results', requireAuth, async (req, res) => {
        return res.status(403).json({ error: 'You can only view your own terms' });
      }
 
+     const where = req.user.role === 'admin'
+       ? { studentId }
+       : { studentId, status: 'published' };
+
      const publications = await prisma.resultPublication.findMany({
-       where: { studentId, status: 'published' },
-       select: { term: true },
+       where,
+       select: { term: true, status: true },
        orderBy: { term: 'desc' },
      });
 
-     res.json(publications.map((p) => p.term));
+     res.json(publications.map((p) => ({ term: p.term, status: p.status })));
    });
 module.exports = router;
